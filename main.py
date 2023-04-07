@@ -1,4 +1,5 @@
 import re
+from difflib import SequenceMatcher
 
 
 # parse_fasta (filename) --> dict
@@ -10,30 +11,119 @@ def parse_fasta(filename):
         dic = {}
         entries = f.split('>')[1:]
         for entry in entries:
-            header, seq = entry.split('\n')[:-1]
-            dic[header] = seq
+            header, seq = entry.split('\n', 1)
+            dic[header] = seq.replace("\n", "")
         return dic
 
 
-# special_chars
-def special_chars(string, database='[^0-9A-z_\-]'):
+# special_chars (str, str) --> bool
+# Takes a string and a regex of accepted characters. Searches the given string for occurrences of non-accepted
+# characters and returns False if there are any matches.
+def special_chars(string, database='[^0-9A-z_]'):
     pattern = re.compile(database)
-    if re.search(pattern, string):
-        return False
+    if re.match(pattern, string):
+        match = re.match(pattern, string)
+        return match.groups()
 
 
+# validate_seq (str, str) --> bool
+# Takes a sequence in str format and searches for non-canonical characters in its sequence. Accepts both DNA
+# and PROTEIN sequences. Returns True for validated sequences and False otherwise.
 def validate_seq(string, type):
     dic = {'DNA': 'ACTG',
            'PROTEIN': 'ACDEFGHIKLMNPQRSTVWY'}
-    for c in string:
-        if c not in dic[type.upper()]:
-            return False
+    for c in range(len(string)):
+        if string[c] not in dic[type.upper()]:
+            return f"position {c+1}, {string[c]}"
     return True
 
 
-dic = parse_fasta('../../Desktop/ALOGs_aa.fasta')
-for h, s in dic.items():
-    if special_chars(h):
-        print(f"{h} presents special characters in header")
-    if not validate_seq(s, 'protein'):
-        print(f"{h} presents non-canonical protein residues")
+# dic = parse_fasta('../../Desktop/ALOGs_aa.fasta')
+# for h, s in dic.items():
+#     if special_chars(h):
+#         print(f"{h} presents special characters in header")
+#     if type(validate_seq(s, 'protein')) == str:
+#         print(f"{h} presents non-canonical protein residues: {validate_seq(s, 'protein')}")
+
+
+def group_similar_strings(strings, similarity_threshold):
+    groups = {}
+    for s in strings:
+        # Find similar strings using the SequenceMatcher
+        for g in groups:
+            ratio = SequenceMatcher(None, s, g).ratio()
+            if ratio >= similarity_threshold:
+                groups[g].add(s)
+                break
+        else:
+            groups[s] = {s}
+
+    aaa = set(tuple(map(str, l)) for l in groups.values())
+
+    lst = []
+    for g in aaa:
+        g = set(g)
+        if len(g) == 2:
+            a, b = list(g)
+            if a != b:
+                lst += [g]
+        elif len(g) > 2:
+            lst += [g]
+
+    # Create a dictionary using the frozensets as keys
+    unique_dict = {}
+    for g in lst:
+        unique_dict[frozenset(g)] = g
+
+    # Get the unique sets from the dictionary
+    unique_lst = sorted(list(unique_dict.values()), key=lambda k: sorted(list(k)))
+    for x in unique_lst:
+        lst = []
+        for s in x:
+            if dic[s] not in lst:
+                lst += [dic[s]]
+        print(x, len(lst) == 1)
+
+
+def seq_diff(afile, bfile):
+    alst = {}
+    blst = {}
+    clst = {}
+    af = parse_fasta(afile)
+    bf = parse_fasta(bfile)
+    for ha, sa in af.items():
+        try:
+            list(bf.keys()).index(ha)
+            clst[ha] = sa
+        except ValueError:
+            alst[ha] = sa
+    for hb, sb in bf.items():
+        try:
+            list(af.keys()).index(hb)
+        except ValueError:
+            blst[hb] = sb
+    print(f"Number of sequences exclusive to {afile}: {len(alst)}")
+    # print(f"Here they are: {alst}")
+    print(f"Number of sequences exclusive to {bfile}: {len(blst)}")
+    # print(f"Here they are: {blst}")
+    print(f"Number of sequences present in both files: {len(clst)}")
+    # print(f"Here they are: {clst}")
+
+
+def check_duplicates(filename):
+    with open(filename) as file:
+        lines = file.readlines()
+    count = 0
+    unique_set = set()
+    for l in lines:
+        if l[0] == '>':
+            count += 1
+            unique_set.add(l.replace('\n', '').strip())
+            if not count == len(unique_set):
+                print(l.replace('\n', '').strip())
+                count -= 1
+
+
+check_duplicates('../../Desktop/ALOGs_aa.fasta')
+seq_diff('../../Desktop/filtered_ALOGs.fa', '../../Desktop/ALOGs_aa.fasta')
+
