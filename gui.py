@@ -16,8 +16,9 @@ def open_file():
 
 
 def update_tree(file):
-    for header, seq in parse_fasta(file).items():
-        t_special_chars.insert('', 'end', text=header, values=seq)
+    it = parse_fasta(file).items()
+    for (header, seq), i in zip(it, range(len(it))):
+        t_special_chars.insert('', 'end', text=i+1, values=(header, seq))
 
 
 # Initiate
@@ -83,11 +84,16 @@ notebook.add(p_dup_seqs, text='Duplicates')
 notebook.grid(column=1, row=1)
 
 # Tree inside p_special_chars
-t_special_chars = ttk.Treeview(p_special_chars, columns=('Sequence', 'Special Characters'), )
-t_special_chars.heading('#0', text='Header')
+t_special_chars = ttk.Treeview(p_special_chars, columns=('Header', 'Sequence', 'Special Characters'), )
+t_special_chars.heading('#0', text='#')
+t_special_chars.column('#0', width=5)
+t_special_chars.heading('Header', text='Header')
 t_special_chars.heading('Sequence', text='Sequence')
 t_special_chars.heading('Special Characters', text='Special Characters')
 t_special_chars.grid(ipadx=80)
-
+# Add a slider to the right
+t_slider = ttk.Scrollbar(p_special_chars, orient=VERTICAL, command=t_special_chars.yview)
+t_special_chars.configure(yscrollcommand=t_slider.set)
+t_slider.grid(column=1, row=0, sticky='NS')
 
 root.mainloop()
