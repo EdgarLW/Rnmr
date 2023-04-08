@@ -19,23 +19,32 @@ def parse_fasta(filename):
 # special_chars (str, str) --> bool
 # Takes a string and a regex of accepted characters. Searches the given string for occurrences of non-accepted
 # characters and returns False if there are any matches.
-def special_chars(string, database='[^0-9A-z_]'):
-    pattern = re.compile(database)
-    if re.match(pattern, string):
-        match = re.match(pattern, string)
-        return match.groups()
+def special_chars(fasta, database='[^0-9A-z_]'):
+    dic = {}
+    for string in parse_fasta(fasta).keys():
+        pattern = re.compile(database)
+        match = re.findall(pattern, string)
+        if match:
+            dic[string] = match
+    return dic
 
 
 # validate_seq (str, str) --> bool
 # Takes a sequence in str format and searches for non-canonical characters in its sequence. Accepts both DNA
 # and PROTEIN sequences. Returns True for validated sequences and False otherwise.
-def validate_seq(string, type):
+def validate_seq(fasta, type):
+    fasta = parse_fasta(fasta)
     dic = {'DNA': 'ACTG',
            'PROTEIN': 'ACDEFGHIKLMNPQRSTVWY'}
-    for c in range(len(string)):
-        if string[c] not in dic[type.upper()]:
-            return f"position {c+1}, {string[c]}"
-    return True
+    dica = {}
+    for header, string in fasta.items():
+        lst = []
+        for c in range(len(string)):
+            if string[c] not in dic[type.upper()]:
+                lst += string[c]
+        if lst:
+            dica[header] = ' '.join(lst)
+    return dica
 
 
 # dic = parse_fasta('../../Desktop/ALOGs_aa.fasta')
@@ -124,6 +133,6 @@ def check_duplicates(filename):
                 count -= 1
 
 
-check_duplicates('../../Desktop/ALOGs_aa.fasta')
-seq_diff('../../Desktop/filtered_ALOGs.fa', '../../Desktop/ALOGs_aa.fasta')
+#check_duplicates('../../Desktop/ALOGs_aa.fasta')
+#seq_diff('../../Desktop/filtered_ALOGs.fa', '../../Desktop/ALOGs_aa.fasta')
 
