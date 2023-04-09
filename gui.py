@@ -4,6 +4,7 @@ from tkinter import filedialog
 from main import parse_fasta
 from main import special_chars
 from main import validate_seq
+from main import parse_single_fasta
 
 
 def donothing():
@@ -17,6 +18,11 @@ def open_file():
     fasta = parse_fasta(file)
     global file_label
     file_label.set('Current file: ' + file)
+    update_labels()
+    update_trees(fasta)
+
+
+def update_labels():
     sc_h_count, sc_s_count = 0, 0
     for entry in fasta.values():
         i, seq, sc_h, sc_s = entry
@@ -28,7 +34,6 @@ def open_file():
     head_label.set(f'A total of {sc_h_count} headers were detected with special characters!')
     global seq_label
     seq_label.set(f'A total of {sc_s_count} sequences were detected with special characters!')
-    update_trees(fasta)
 
 
 def update_trees(fasta):
@@ -86,7 +91,8 @@ def open_fasta(event):
 
     # Button for Saving
     save_button = Button(newframe, text='Save', width=10,
-                         command=lambda: save_fasta(values[0], entry.get('1.1', '1.end'), entry.get('2.0', '2.end')))
+                         command=lambda: save_fasta(new_window,
+                                                    parse_single_fasta(entry.get('1.0', 'end'))))
     save_button.grid(column=0, row=1, pady=7, sticky='NES')
 
     # Set minimum size
@@ -94,7 +100,9 @@ def open_fasta(event):
     new_window.minsize(new_window.winfo_width(), new_window.winfo_height())
 
 
-def save_fasta(old_header, new_header, seq):
+def save_fasta(window, text):
+    old_header = window.title()
+    new_header, seq = text
     global fasta
     if old_header != new_header:
         new_fasta = {}
@@ -107,11 +115,13 @@ def save_fasta(old_header, new_header, seq):
             else:
                 new_fasta[key] = value
         fasta = new_fasta
+        window.title(f"{new_header}")
     else:
-        fasta[header][1] = seq
-        fasta[header][2] = special_chars(new_header)
-        fasta[header][3] = validate_seq(seq, type='protein')
+        fasta[old_header][1] = seq
+        fasta[old_header][2] = special_chars(new_header)
+        fasta[old_header][3] = validate_seq(seq, type='protein')
     update_trees(fasta)
+    update_labels()
 
 
 # Initiate

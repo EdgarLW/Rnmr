@@ -42,6 +42,14 @@ def parse_fasta(filename):
         return dic
 
 
+def parse_single_fasta(string):
+    string = string.split('>', 1)[-1]
+    header, seq = string.split('\n', 1)
+    header, seq = header.strip(), seq.strip().replace('\n', '')
+    return header, seq
+
+
+
 # dic = parse_fasta('../../Desktop/ALOGs_aa.fasta')
 # for h, s in dic.items():
 #     if special_chars(h):
