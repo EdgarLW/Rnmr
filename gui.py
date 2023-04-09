@@ -11,20 +11,35 @@ def donothing():
 
 
 def open_file():
-    global file_label
+    global file
     file = filedialog.askopenfilename()
+    global fasta
+    fasta = parse_fasta(file)
+    global file_label
     file_label.set('Current file: ' + file)
-    update_overview(file)
+    sc_h_count, sc_s_count = 0, 0
+    for entry in fasta.values():
+        i, seq, sc_h, sc_s = entry
+        if sc_h:
+            sc_h_count += 1
+        if sc_s:
+            sc_s_count += 1
     global head_label
-    head_label.set(f'A total of {len(special_chars(file))} headers were detected with special characters!')
+    head_label.set(f'A total of {sc_h_count} headers were detected with special characters!')
     global seq_label
-    seq_label.set(f'A total of {len(validate_seq(file, type="protein"))} sequences were detected with special characters!')
+    seq_label.set(f'A total of {sc_s_count} sequences were detected with special characters!')
+
+    update_overview(fasta)
 
 
-def update_overview(file):
-    it = parse_fasta(file).items()
-    for (header, seq), i in zip(it, range(len(it))):
-        t_overview.insert('', 'end', text=i + 1, values=(header, seq))
+def update_overview(fasta):
+    fasta = fasta.items()
+    for header, values in fasta:
+        t_overview.insert('', 'end', text=values[0], values=(header, values[1]))
+        if values[2]:
+            t_sc_header.insert('', 'end', text=values[0], values=(header, values[2]))
+        if values[3]:
+            t_sc_seq.insert('', 'end', text=values[0], values=(header, values[3]))
 
 
 def navigate(idxs):
@@ -41,6 +56,8 @@ def open_fasta(event):
     # Check for content inside Treeview before opening new window
     if not event.widget.selection():
         return
+
+    global fasta
 
     # Get the item that was clicked
     item_id = event.widget.focus()
@@ -61,7 +78,7 @@ def open_fasta(event):
     # Add the content inside the new window
     entry = Text(newframe)
     entry.configure()
-    entry.insert('1.0', f'>{values[0]}\n{values[1]}')
+    entry.insert('1.0', f'>{values[0]}\n{fasta[values[0]][1]}')
     entry.grid(column=0, row=0, sticky='NWES')
 
     # Set minimum size
@@ -69,13 +86,17 @@ def open_fasta(event):
     new_window.minsize(new_window.winfo_width(), new_window.winfo_height())
 
 
-
 # Initiate
 root = Tk()
 root.title("Rnmr")
 
+file = ''
+fasta = {}
+
 # Set root and mainframe
 mainframe = ttk.Frame(root, padding="3 3 12 12")
+mainframe.columnconfigure(6, weight=1)
+mainframe.rowconfigure(6, weight=1)
 mainframe.grid(column=0, row=0, sticky='NWES')
 root.columnconfigure(0, weight=1)
 root.rowconfigure(0, weight=1)
@@ -115,7 +136,7 @@ open_file_label = ttk.Label(open_file_frame, textvariable=file_label, width=80)
 open_file_label.grid(column=1, row=0, sticky='W')
 # Button to load file
 file_button = Button(mainframe, text='Load', command=open_file)
-file_button.grid(column=2, ipadx=6, row=0, sticky='NW')
+file_button.grid(column=2, ipadx=6, row=0, sticky='W')
 
 # Listbox for actions
 options = ['Overview', 'Tools', '    Special Characters']
@@ -126,8 +147,10 @@ listbox.grid(column=0, row=0, rowspan=2, sticky='NSW')
 listbox.bind('<<ListboxSelect>>', lambda e: navigate(listbox.curselection()))
 
 # Overview Frame
-overview_frame = Frame(mainframe, height=200, borderwidth=2, relief='groove', width=475)
-overview_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
+overview_frame = Frame(mainframe, borderwidth=2, relief='groove', width=475)
+overview_frame.grid(column=1, columnspan=2, row=1, sticky='NW', padx=7)
+overview_frame.grid_rowconfigure(0, weight=1)
+overview_frame.grid_columnconfigure(0, weight=1)
 # Overview action
 t_overview = ttk.Treeview(overview_frame, columns='header')
 t_overview.heading('#0', text='#')
@@ -143,25 +166,60 @@ t_slider.grid(column=1, row=0, sticky='NSE')
 t_overview.bind('<Double-1>', open_fasta)
 
 # Special Chars Frame
-sc_frame = Frame(mainframe, height=200, borderwidth=2, relief='groove', width=475)
+sc_frame = Frame(mainframe, borderwidth=2, relief='groove', width=600)
 sc_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
+sc_frame.grid_rowconfigure(0, weight=1)
+sc_frame.grid_columnconfigure(0, weight=1)
 # Notebook with Headers and Sequences tabs
 sc_notebook = ttk.Notebook(sc_frame)
 n_headers = ttk.Frame(sc_notebook)
 n_seqs = ttk.Frame(sc_notebook)
+sc_notebook.grid(column=0, row=0, columnspan=2, sticky='NEW')
+n_headers.grid_rowconfigure(0, weight=1)
+n_headers.grid_columnconfigure(0, weight=1)
+n_seqs.grid_rowconfigure(0, weight=1)
+n_seqs.grid_columnconfigure(0, weight=1)
+
+
 # Headers tab
 sc_notebook.add(n_headers, text='Headers')
 head_label = StringVar(value='Please select a file')
-sc_head_label = ttk.Label(n_headers, textvariable=head_label, width=89)
-sc_head_label.grid(column=0, row=0, sticky='NW')
+sc_head_label = ttk.Label(n_headers, textvariable=head_label)
+sc_head_label.grid(column=0, row=0, sticky='NW', ipadx=5)
+t_sc_header = ttk.Treeview(n_headers, columns=('h', 'sc'))
+t_sc_header.heading('#0', text='#')
+t_sc_header.column('#0', width=50, anchor='w')
+t_sc_header.heading('h', text='Header')
+t_sc_header.column('h', width=322)
+t_sc_header.heading('sc', text='Special Characters')
+t_sc_header.column('sc', width=150)
+t_sc_header.grid(column=0, row=1, sticky='NSEW')
+# Add a slider to the right
+t_sc_header_slider = ttk.Scrollbar(n_headers, orient=VERTICAL, command=t_sc_header.yview)
+t_sc_header.configure(yscrollcommand=t_sc_header_slider.set)
+t_sc_header_slider.grid(column=1, row=1, sticky='NSE')
+# Add double click option on entry to open new window with FASTA
+t_sc_header.bind('<Double-1>', open_fasta)
+
 # Sequences tab
 sc_notebook.add(n_seqs, text='Sequences')
 seq_label = StringVar(value='Please select a file')
-seq_head_label = ttk.Label(n_seqs, textvariable=seq_label, width=89)
-seq_head_label.grid(column=0, row=0, sticky='NW')
-
-sc_notebook.grid(column=0, row=0, columnspan=2)
-
+seq_head_label = ttk.Label(n_seqs, textvariable=seq_label)
+seq_head_label.grid(column=0, row=0, sticky='NW', ipadx=5)
+t_sc_seq = ttk.Treeview(n_seqs, columns=('h', 'sc'))
+t_sc_seq.heading('#0', text='#')
+t_sc_seq.column('#0', width=50, anchor='w')
+t_sc_seq.heading('h', text='Header')
+t_sc_seq.column('h', width=322)
+t_sc_seq.heading('sc', text='Special Characters')
+t_sc_seq.column('sc', width=150)
+t_sc_seq.grid(column=0, row=1, sticky='NSEW')
+# Add a slider to the right
+t_sc_seq_slider = ttk.Scrollbar(n_seqs, orient=VERTICAL, command=t_sc_seq.yview)
+t_sc_seq.configure(yscrollcommand=t_sc_seq_slider.set)
+t_sc_seq_slider.grid(column=1, row=1, sticky='NSE')
+# Add double click option on entry to open new window with FASTA
+t_sc_seq.bind('<Double-1>', open_fasta)
 
 sc_frame.grid_remove()
 

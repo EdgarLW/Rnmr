@@ -2,6 +2,31 @@ import re
 from difflib import SequenceMatcher
 
 
+# special_chars (str, str) --> bool
+# Takes a string and a regex of accepted characters. Searches the given string for occurrences of non-accepted
+# characters and returns False if there are any matches.
+def special_chars(string, database='[^0-9A-z_]'):
+    pattern = re.compile(database)
+    match = re.findall(pattern, string)
+    lst = []
+    if match:
+        lst += [match]
+    return lst
+
+
+# validate_seq (str, str) --> bool
+# Takes a sequence in str format and searches for non-canonical characters in its sequence. Accepts both DNA
+# and PROTEIN sequences. Returns True for validated sequences and False otherwise.
+def validate_seq(string, type):
+    dic = {'DNA': 'ACTG',
+           'PROTEIN': 'ACDEFGHIKLMNPQRSTVWY'}
+    lst = []
+    for c in range(len(string)):
+        if string[c] not in dic[type.upper()]:
+            lst += [string[c]]
+    return lst
+
+
 # parse_fasta (filename) --> dict
 # Takes a filename in fasta format as str and returns a dictionary containing headers as keys and their sequences
 # as values.
@@ -10,41 +35,11 @@ def parse_fasta(filename):
         f = file.read()
         dic = {}
         entries = f.split('>')[1:]
-        for entry in entries:
+        for i, entry in zip(range(len(entries)), entries):
             header, seq = entry.split('\n', 1)
-            dic[header] = seq.replace("\n", "")
+            seq = seq.replace("\n", "")
+            dic[header] = [i + 1, seq, special_chars(header), validate_seq(seq, type='protein')]
         return dic
-
-
-# special_chars (str, str) --> bool
-# Takes a string and a regex of accepted characters. Searches the given string for occurrences of non-accepted
-# characters and returns False if there are any matches.
-def special_chars(fasta, database='[^0-9A-z_]'):
-    dic = {}
-    for string in parse_fasta(fasta).keys():
-        pattern = re.compile(database)
-        match = re.findall(pattern, string)
-        if match:
-            dic[string] = match
-    return dic
-
-
-# validate_seq (str, str) --> bool
-# Takes a sequence in str format and searches for non-canonical characters in its sequence. Accepts both DNA
-# and PROTEIN sequences. Returns True for validated sequences and False otherwise.
-def validate_seq(fasta, type):
-    fasta = parse_fasta(fasta)
-    dic = {'DNA': 'ACTG',
-           'PROTEIN': 'ACDEFGHIKLMNPQRSTVWY'}
-    dica = {}
-    for header, string in fasta.items():
-        lst = []
-        for c in range(len(string)):
-            if string[c] not in dic[type.upper()]:
-                lst += string[c]
-        if lst:
-            dica[header] = ' '.join(lst)
-    return dica
 
 
 # dic = parse_fasta('../../Desktop/ALOGs_aa.fasta')
