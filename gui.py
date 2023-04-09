@@ -28,11 +28,13 @@ def open_file():
     head_label.set(f'A total of {sc_h_count} headers were detected with special characters!')
     global seq_label
     seq_label.set(f'A total of {sc_s_count} sequences were detected with special characters!')
+    update_trees(fasta)
 
-    update_overview(fasta)
 
-
-def update_overview(fasta):
+def update_trees(fasta):
+    t_overview.delete(*t_overview.get_children())
+    t_sc_header.delete(*t_sc_header.get_children())
+    t_sc_seq.delete(*t_sc_seq.get_children())
     fasta = fasta.items()
     for header, values in fasta:
         t_overview.insert('', 'end', text=values[0], values=(header, values[1]))
@@ -69,21 +71,47 @@ def open_fasta(event):
     # Create and display the new window
     new_window = Toplevel(root)
     new_window.title(f"{values[0]}")
-    newframe = ttk.Frame(new_window, padding="3 3 12 12")
-    newframe.grid(column=0, row=0, sticky='NWES')
     new_window.columnconfigure(0, weight=1)
     new_window.rowconfigure(0, weight=1)
+    newframe = ttk.Frame(new_window, padding="3 3 7 0")
+    newframe.grid(column=0, row=0, sticky='NSEW')
     new_window.option_add('**tearOff', FALSE)
 
     # Add the content inside the new window
+    # Entry (text)
     entry = Text(newframe)
     entry.configure()
     entry.insert('1.0', f'>{values[0]}\n{fasta[values[0]][1]}')
-    entry.grid(column=0, row=0, sticky='NWES')
+    entry.grid(column=0, row=0, sticky='NSEW')
+
+    # Button for Saving
+    save_button = Button(newframe, text='Save', width=10,
+                         command=lambda: save_fasta(values[0], entry.get('1.1', '1.end'), entry.get('2.0', '2.end')))
+    save_button.grid(column=0, row=1, pady=7, sticky='NES')
 
     # Set minimum size
     new_window.update_idletasks()
     new_window.minsize(new_window.winfo_width(), new_window.winfo_height())
+
+
+def save_fasta(old_header, new_header, seq):
+    global fasta
+    if old_header != new_header:
+        new_fasta = {}
+        for key, value in fasta.items():
+            if value[0] == fasta[old_header][0]:
+                new_fasta[new_header] = [value[0],
+                                         seq,
+                                         special_chars(new_header),
+                                         validate_seq(seq, type='protein')]
+            else:
+                new_fasta[key] = value
+        fasta = new_fasta
+    else:
+        fasta[header][1] = seq
+        fasta[header][2] = special_chars(new_header)
+        fasta[header][3] = validate_seq(seq, type='protein')
+    update_trees(fasta)
 
 
 # Initiate
