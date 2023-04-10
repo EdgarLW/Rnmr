@@ -40,6 +40,8 @@ def update_trees(fasta):
     t_overview.delete(*t_overview.get_children())
     t_sc_header.delete(*t_sc_header.get_children())
     t_sc_seq.delete(*t_sc_seq.get_children())
+    t_sc_header_tool.delete(*t_sc_header_tool.get_children())
+    t_sc_seq_tool.delete(*t_sc_seq_tool.get_children())
     fasta = fasta.items()
     for header, values in fasta:
         t_overview.insert('', 'end', text=values[0], values=(header, values[1]))
@@ -47,6 +49,26 @@ def update_trees(fasta):
             t_sc_header.insert('', 'end', text=values[0], values=(header, values[2]))
         if values[3]:
             t_sc_seq.insert('', 'end', text=values[0], values=(header, values[3]))
+    t_sc_header_children = t_sc_header.get_children()
+    if t_sc_header_children:
+        header_children = set()
+        for child in t_sc_header_children:
+            sc = t_sc_header.item(child)['values'][1]
+            sc = set(sc.split(' '))
+            for s in sc:
+                header_children.add(s)
+        for i in range(len(header_children)):
+            t_sc_header_tool.insert('', 'end', text='', values=(list(header_children)[i], '', ''))
+    t_sc_seq_children = t_sc_seq.get_children()
+    if t_sc_seq_children:
+        seq_children = set()
+        for child in t_sc_seq_children:
+            sc = t_sc_seq.item(child)['values'][1]
+            sc = set(sc.split(' '))
+            for s in sc:
+                seq_children.add(s)
+        for i in range(len(seq_children)):
+            t_sc_seq_tool.insert('', 'end', text='', values=(list(seq_children)[i], '', ''))
 
 
 def navigate(idxs):
@@ -204,21 +226,20 @@ t_slider.grid(column=1, row=0, sticky='NSE')
 t_overview.bind('<Double-1>', open_fasta)
 
 # Special Chars Frame
-sc_frame = Frame(mainframe, borderwidth=2, relief='groove', width=600)
+sc_frame = Frame(mainframe, borderwidth=2, relief='groove', width=548, height=527)
 sc_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
 sc_frame.grid_rowconfigure(0, weight=1)
 sc_frame.grid_columnconfigure(0, weight=1)
+sc_frame.grid_propagate(False)
 # Notebook with Headers and Sequences tabs
 sc_notebook = ttk.Notebook(sc_frame)
 n_headers = ttk.Frame(sc_notebook)
 n_seqs = ttk.Frame(sc_notebook)
-sc_notebook.grid(column=0, row=0, columnspan=2, sticky='NEW')
+sc_notebook.grid(column=0, row=1, columnspan=2, sticky='NEW')
 n_headers.grid_rowconfigure(0, weight=1)
 n_headers.grid_columnconfigure(0, weight=1)
 n_seqs.grid_rowconfigure(0, weight=1)
 n_seqs.grid_columnconfigure(0, weight=1)
-
-
 # Headers tab
 sc_notebook.add(n_headers, text='Headers')
 head_label = StringVar(value='Please select a file')
@@ -226,11 +247,10 @@ sc_head_label = ttk.Label(n_headers, textvariable=head_label)
 sc_head_label.grid(column=0, row=0, sticky='NW', ipadx=5)
 t_sc_header = ttk.Treeview(n_headers, columns=('h', 'sc'))
 t_sc_header.heading('#0', text='#')
-t_sc_header.column('#0', width=50, anchor='w')
+t_sc_header.column('#0', width=50, stretch=False)
 t_sc_header.heading('h', text='Header')
-t_sc_header.column('h', width=322)
 t_sc_header.heading('sc', text='Special Characters')
-t_sc_header.column('sc', width=150)
+t_sc_header.column('sc', width=0)
 t_sc_header.grid(column=0, row=1, sticky='NSEW')
 # Add a slider to the right
 t_sc_header_slider = ttk.Scrollbar(n_headers, orient=VERTICAL, command=t_sc_header.yview)
@@ -238,6 +258,21 @@ t_sc_header.configure(yscrollcommand=t_sc_header_slider.set)
 t_sc_header_slider.grid(column=1, row=1, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
 t_sc_header.bind('<Double-1>', open_fasta)
+# Add bottom treeview for actions
+t_sc_header_tool = ttk.Treeview(n_headers, columns=('sc', 'act', 'ui'))
+t_sc_header_tool.column('#0', width=30, stretch=False)
+t_sc_header_tool.heading('sc', text='Special Characters')
+t_sc_header_tool.heading('act', text='Action')
+t_sc_header_tool.column('act', width=80, stretch=False)
+t_sc_header_tool.heading('ui', text='User Input')
+t_sc_header_tool.grid(column=0, row=2, sticky='NSEW')
+# Add a slider to the right
+t_sc_header_tool_slider = ttk.Scrollbar(n_headers, orient=VERTICAL, command=t_sc_header_tool.yview)
+t_sc_header_tool.configure(yscrollcommand=t_sc_header_tool_slider.set)
+t_sc_header_tool_slider.grid(column=1, row=2, sticky='NSE')
+# Go Button
+go_button = ttk.Button(n_headers, text='Go', command=donothing)
+go_button.grid(column=0, row=3, sticky='NSE')
 
 # Sequences tab
 sc_notebook.add(n_seqs, text='Sequences')
@@ -246,11 +281,10 @@ seq_head_label = ttk.Label(n_seqs, textvariable=seq_label)
 seq_head_label.grid(column=0, row=0, sticky='NW', ipadx=5)
 t_sc_seq = ttk.Treeview(n_seqs, columns=('h', 'sc'))
 t_sc_seq.heading('#0', text='#')
-t_sc_seq.column('#0', width=50, anchor='w')
+t_sc_seq.column('#0', width=50, stretch=False)
 t_sc_seq.heading('h', text='Header')
-t_sc_seq.column('h', width=322)
 t_sc_seq.heading('sc', text='Special Characters')
-t_sc_seq.column('sc', width=150)
+t_sc_seq.column('sc', width=0)
 t_sc_seq.grid(column=0, row=1, sticky='NSEW')
 # Add a slider to the right
 t_sc_seq_slider = ttk.Scrollbar(n_seqs, orient=VERTICAL, command=t_sc_seq.yview)
@@ -258,6 +292,21 @@ t_sc_seq.configure(yscrollcommand=t_sc_seq_slider.set)
 t_sc_seq_slider.grid(column=1, row=1, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
 t_sc_seq.bind('<Double-1>', open_fasta)
+# Add bottom treeview for actions
+t_sc_seq_tool = ttk.Treeview(n_seqs, columns=('sc', 'act', 'ui'))
+t_sc_seq_tool.column('#0', width=30, stretch=False)
+t_sc_seq_tool.heading('sc', text='Special Characters')
+t_sc_seq_tool.heading('act', text='Action')
+t_sc_seq_tool.column('act', width=80, stretch=False)
+t_sc_seq_tool.heading('ui', text='User Input')
+t_sc_seq_tool.grid(column=0, row=2, sticky='NSEW')
+# Add a slider to the right
+t_sc_seq_tool_slider = ttk.Scrollbar(n_seqs, orient=VERTICAL, command=t_sc_seq_tool.yview)
+t_sc_seq_tool.configure(yscrollcommand=t_sc_seq_tool_slider.set)
+t_sc_seq_tool_slider.grid(column=1, row=2, sticky='NSE')
+# Go Button
+go_button = ttk.Button(n_seqs, text='Go', command=donothing)
+go_button.grid(column=0, row=3, sticky='NSE')
 
 sc_frame.grid_remove()
 
