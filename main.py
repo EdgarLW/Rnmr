@@ -10,7 +10,11 @@ def special_chars(string, database='[^0-9A-z_]'):
     match = re.findall(pattern, string)
     lst = []
     if match:
-        lst += [match]
+        for m in range(len(match)):
+            if match[m] == ' ':
+                match.pop(m)
+                match.insert(m, 'Space')
+        lst += match
     return lst
 
 
@@ -49,16 +53,7 @@ def parse_single_fasta(string):
     return header, seq
 
 
-
-# dic = parse_fasta('../../Desktop/ALOGs_aa.fasta')
-# for h, s in dic.items():
-#     if special_chars(h):
-#         print(f"{h} presents special characters in header")
-#     if type(validate_seq(s, 'protein')) == str:
-#         print(f"{h} presents non-canonical protein residues: {validate_seq(s, 'protein')}")
-
-
-def group_similar_strings(strings, similarity_threshold):
+def group_similar_strings(dic, strings, similarity_threshold):
     groups = {}
     for s in strings:
         # Find similar strings using the SequenceMatcher
