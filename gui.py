@@ -1,3 +1,4 @@
+import tkinter.ttk
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
@@ -6,6 +7,8 @@ from main import special_chars
 from main import validate_seq
 from main import parse_single_fasta
 
+WINDOW_HEIGHT = 500
+WINDOW_WIDTH = 900
 
 def donothing():
     print('Nothing')
@@ -41,6 +44,12 @@ def update_trees(fasta):
     t_overview.delete(*t_overview.get_children())
     t_sc_header.delete(*t_sc_header.get_children())
     t_sc_seq.delete(*t_sc_seq.get_children())
+    for widget in n_headers.winfo_children():
+        if isinstance(widget, (ttk.Combobox, ttk.Entry, ttk.Checkbutton)):
+            widget.destroy()
+    for widget in n_seqs.winfo_children():
+        if isinstance(widget, (ttk.Combobox, ttk.Entry, ttk.Checkbutton)):
+            widget.destroy()
     fasta = fasta.items()
     for header, values in fasta:
         t_overview.insert('', 'end', text=values[0], values=[header, values[1]])
@@ -50,6 +59,7 @@ def update_trees(fasta):
             t_sc_seq.insert('', 'end', text=values[0], values=[header, values[3]])
     t_sc_header_children = t_sc_header.get_children()
     if t_sc_header_children:
+        go_buttonH.state(['!disabled'])
         header_children = set()
         for child in t_sc_header_children:
             sc = t_sc_header.item(child)['values'][1]
@@ -62,6 +72,7 @@ def update_trees(fasta):
             ttk.Entry(n_headers).grid(column=2, row=i + 2, sticky='we')
     t_sc_seq_children = t_sc_seq.get_children()
     if t_sc_seq_children:
+        go_buttonS.state(['!disabled'])
         seq_children = set()
         for child in t_sc_seq_children:
             sc = t_sc_seq.item(child)['values'][1]
@@ -145,8 +156,8 @@ def open_fasta(event):
 
     # Button for Saving
     save_button = Button(newframe, text='Save', width=10,
-                         command=lambda: save_fasta(new_window,
-                                                    parse_single_fasta(entry.get('1.0', 'end'))))
+                         command=lambda: save_fasta(parse_single_fasta(entry.get('1.0', 'end')),
+                                                    window=new_window, save=True))
     save_button.grid(column=0, row=1, pady=7, sticky='NES')
 
     # Set minimum size
@@ -154,9 +165,19 @@ def open_fasta(event):
     new_window.minsize(new_window.winfo_width(), new_window.winfo_height())
 
 
-def save_fasta(window, text):
-    old_header = window.title()
+def save_fasta(text, window=None, type=None, replace=None, save=False):
     new_header, seq = text
+    if window is None:
+        if type == 'H':
+            old_header = new_header
+            new_header = new_header.replace(replace[0], replace[1])
+        elif type == 'S':
+            old_header = new_header
+            seq = seq.replace(replace[0], replace[1])
+        else:
+            return 'type variable required'
+    else:
+        old_header = window.title()
     global fasta
     if old_header != new_header:
         new_fasta = {}
@@ -169,14 +190,56 @@ def save_fasta(window, text):
             else:
                 new_fasta[key] = value
         fasta = new_fasta
-        window.title(f"{new_header}")
+        if window:
+            window.title(f"{new_header}")
     else:
         fasta[old_header][1] = seq
         fasta[old_header][2] = special_chars(new_header)
         fasta[old_header][3] = validate_seq(seq, type='protein')
+    if save:
+        update_trees(fasta)
+        update_labels()
+
+
+def go_button(type):
+    check_list = []
+    combo_list = []
+    entry_list = []
+    if type == 'H':
+        notebook = n_headers
+    else:
+        notebook = n_seqs
+    for widget in notebook.winfo_children():
+        if isinstance(widget, tkinter.ttk.Checkbutton):
+            check_list.append(widget)
+        elif isinstance(widget, tkinter.ttk.Combobox):
+            combo_list.append(widget)
+        elif isinstance(widget, tkinter.ttk.Entry):
+            entry_list.append(widget)
+    children = []
+    for check, choice, text in zip(check_list, combo_list, entry_list):
+        if check.state() == ('selected',):
+            if choice.current() == 0:
+                if type == 'H':
+                    t = t_sc_header
+                    t_children = t_sc_header.get_children()
+                else:
+                    t = t_sc_seq
+                    t_children = t_sc_seq.get_children()
+                for child in t_children:
+                    children.append(t.item(child)['values'][0])
+                for child in children:
+                    seq = fasta[child][1]
+                    rep = str(check.cget('text'))
+                    if rep == 'Space':
+                        rep = ' '
+                    save_fasta((child, seq), type=type, replace=(rep, text.get()))
+            elif choice == 1:
+                pass
+            elif choice == 2:
+                pass
     update_trees(fasta)
     update_labels()
-
 
 # Initiate
 root = Tk()
@@ -266,7 +329,7 @@ dup_frame.grid_remove()
 
 
 # Special Chars Frame
-sc_frame = Frame(mainframe, borderwidth=2, relief='groove', width=548, height=527)
+sc_frame = Frame(mainframe, borderwidth=2, relief='groove')
 sc_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
 sc_frame.grid_rowconfigure(0, weight=1)
 sc_frame.grid_columnconfigure(0, weight=1)
@@ -300,8 +363,9 @@ t_sc_header_slider.grid(column=3, row=1, sticky='NSE')
 t_sc_header.bind('<Double-1>', open_fasta)
 
 # Go Button
-go_button = ttk.Button(n_headers, text='Go', command=donothing)
-go_button.grid(column=3, row=2, rowspan=1000, sticky='NSE')
+go_buttonH = ttk.Button(n_headers, text='Go', command=lambda: go_button('H'))
+go_buttonH.grid(column=3, row=2, rowspan=1000, sticky='NSE')
+go_buttonH.state(['disabled'])
 
 # Sequences tab
 sc_notebook.add(n_seqs, text='Sequences')
@@ -323,8 +387,9 @@ t_sc_seq_slider.grid(column=3, row=1, sticky='NSE')
 t_sc_seq.bind('<Double-1>', open_fasta)
 
 # Go Button
-go_button = ttk.Button(n_seqs, text='Go', command=donothing)
-go_button.grid(column=3, row=2, rowspan=1000, sticky='NSE')
+go_buttonS = ttk.Button(n_seqs, text='Go', command=lambda: go_button('S'))
+go_buttonS.grid(column=3, row=2, rowspan=1000, sticky='NSE')
+go_buttonS.state(['disabled'])
 
 sc_frame.grid_remove()
 
@@ -344,6 +409,6 @@ o2h_frame.grid_remove()
 
 
 root.update_idletasks()
-root.minsize(root.winfo_width(), root.winfo_height())
+root.minsize(WINDOW_WIDTH, WINDOW_HEIGHT)
 
 root.mainloop()
