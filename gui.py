@@ -10,6 +10,7 @@ from main import parse_single_fasta
 WINDOW_HEIGHT = 500
 WINDOW_WIDTH = 900
 
+
 def donothing():
     print('Nothing')
 
@@ -27,21 +28,26 @@ def open_file():
 
 
 def update_labels():
-    sc_h_count, sc_s_count = 0, 0
+    sc_h_count, sc_s_count, dup_count = 0, 0, 0
     for entry in fasta.values():
-        i, seq, sc_h, sc_s = entry
+        i, seq, sc_h, sc_s, dup = entry
         if sc_h:
             sc_h_count += 1
         if sc_s:
             sc_s_count += 1
+        if dup:
+            dup_count += 1
     global head_label
     head_label.set(f'A total of {sc_h_count} headers were detected with special characters!')
     global seq_label
     seq_label.set(f'A total of {sc_s_count} sequences were detected with special characters!')
+    global dup_label
+    dup_label.set(f'A total of {dup_count} sequences were detected as duplicates!')
 
 
 def update_trees(fasta):
     t_overview.delete(*t_overview.get_children())
+    t_dup.delete(*t_dup.get_children())
     t_sc_header.delete(*t_sc_header.get_children())
     t_sc_seq.delete(*t_sc_seq.get_children())
     for widget in n_headers.winfo_children():
@@ -52,11 +58,13 @@ def update_trees(fasta):
             widget.destroy()
     fasta = fasta.items()
     for header, values in fasta:
-        t_overview.insert('', 'end', text=values[0], values=[header, values[1]])
+        t_overview.insert('', 'end', text=values[0], values=[header, len(values[1]), values[1]])
         if values[2]:
             t_sc_header.insert('', 'end', text=values[0], values=[header, values[2]])
         if values[3]:
             t_sc_seq.insert('', 'end', text=values[0], values=[header, values[3]])
+        if values[4]:
+            t_dup.insert('', 'end', text=values[0], values=[header, values[1]])
     t_sc_header_children = t_sc_header.get_children()
     if t_sc_header_children:
         go_buttonH.state(['!disabled'])
@@ -219,27 +227,56 @@ def go_button(type):
     children = []
     for check, choice, text in zip(check_list, combo_list, entry_list):
         if check.state() == ('selected',):
+            if type == 'H':
+                t = t_sc_header
+                t_children = t_sc_header.get_children()
+            else:
+                t = t_sc_seq
+                t_children = t_sc_seq.get_children()
+            for child in t_children:
+                children.append(t.item(child)['values'][0])
             if choice.current() == 0:
-                if type == 'H':
-                    t = t_sc_header
-                    t_children = t_sc_header.get_children()
-                else:
-                    t = t_sc_seq
-                    t_children = t_sc_seq.get_children()
-                for child in t_children:
-                    children.append(t.item(child)['values'][0])
                 for child in children:
                     seq = fasta[child][1]
                     rep = str(check.cget('text'))
                     if rep == 'Space':
                         rep = ' '
                     save_fasta((child, seq), type=type, replace=(rep, text.get()))
-            elif choice == 1:
-                pass
-            elif choice == 2:
-                pass
+            elif choice.current() == 1:
+                out = ''
+                for child in children:
+                    out += f'>{child}\n{fasta[child][1]}\n'
+                with open(text.get(), 'a') as file:
+                    file.write(out)
+            elif choice.current() == 2:
+                out = ''
+                for child in children:
+                    out += f'>{child}\n{fasta[child][1]}\n'
+                    fasta.pop(child)
+                with open(text.get(), 'a') as file:
+                    file.write(out)
     update_trees(fasta)
     update_labels()
+
+
+def delete_seq(event):
+    # Check for content inside Treeview before opening new window
+    if not event.widget.selection():
+        return
+
+    global fasta
+
+    # Get the item that was clicked
+    item_id = event.widget.focus()
+
+    # Get the values of the item
+    item = event.widget.item(item_id)
+    header = item['values'][0]
+    fasta.pop(header)
+
+    update_labels()
+    update_trees(fasta)
+
 
 # Initiate
 root = Tk()
@@ -307,11 +344,13 @@ overview_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
 overview_frame.grid_rowconfigure(0, weight=1)
 overview_frame.grid_columnconfigure(0, weight=1)
 # Overview action
-t_overview = ttk.Treeview(overview_frame, columns='header')
+t_overview = ttk.Treeview(overview_frame, columns=('header', 'length'))
 t_overview.heading('#0', text='#')
 t_overview.column('#0', width=50, anchor='w', stretch=False)
 t_overview.heading('header', text='Header')
 t_overview.column('header', anchor='w')
+t_overview.heading('length', text='Length')
+t_overview.column('length', anchor='w')
 t_overview.grid(column=0, row=0, sticky='NSEW', pady=1)
 # Add a slider to the right
 t_slider = ttk.Scrollbar(overview_frame, orient=VERTICAL, command=t_overview.yview)
@@ -324,6 +363,27 @@ t_overview.bind('<Double-1>', open_fasta)
 # Duplicates Frame
 dup_frame = Frame(mainframe, borderwidth=2, relief='groove')
 dup_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
+dup_frame.grid_rowconfigure(1, weight=1)
+dup_frame.grid_columnconfigure(0, weight=1)
+dup_frame.grid_propagate(False)
+#
+dup_label = StringVar(value='Please select a file')
+dup_dup_label = ttk.Label(dup_frame, textvariable=dup_label)
+dup_dup_label.grid(column=0, columnspan=4, row=0, sticky='nw', ipadx=5)
+#
+t_dup = ttk.Treeview(dup_frame, columns='h')
+t_dup.heading('#0', text='#')
+t_dup.column('#0', width=50, stretch=False)
+t_dup.heading('h', text='Header')
+t_dup.grid(column=0, columnspan=4, row=1, sticky='nsew')
+#
+t_dup_slider = ttk.Scrollbar(dup_frame, orient=VERTICAL, command=t_dup.yview)
+t_dup.configure(yscrollcommand=t_dup_slider.set)
+t_dup_slider.grid(column=1, row=1, sticky='nse')
+# Add double click option on entry to open new window with FASTA
+t_dup.bind('<Double-1>', open_fasta)
+#
+t_dup.bind('<Delete>', delete_seq)
 
 dup_frame.grid_remove()
 
@@ -397,6 +457,20 @@ sc_frame.grid_remove()
 # Similarity Frame
 sim_frame = Frame(mainframe, borderwidth=2, relief='groove')
 sim_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
+sim_frame.grid_rowconfigure(1, weight=1)
+sim_frame.grid_columnconfigure(0, weight=1)
+sim_frame.grid_propagate(False)
+#
+sim_message = ttk.Label(sim_frame, text='Grouping very similar strings may take a while, so please press the Run'
+                                        ' button whenever you wish to run the analysis.')
+sim_message.grid(column=0, row=0, sticky='nw')
+#
+run_button = ttk.Button(sim_frame, text='Run', command=donothing)
+run_button.grid(column=1, row=0, sticky='ns')
+#
+t_sim = ttk.Treeview(sim_frame, columns=('h', 'hh'))
+t_sim.state(['disabled'])
+t_sim.grid(column=0, columnspan=2, row=1, sticky='nsew')
 
 sim_frame.grid_remove()
 

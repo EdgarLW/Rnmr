@@ -36,15 +36,29 @@ def validate_seq(string, type):
 # as values.
 def parse_fasta(filename):
     with open(filename) as file:
-        f = file.read()
-        dic = {}
-        entries = f.split('>')[1:]
-        for i, entry in zip(range(len(entries)), entries):
-            header, seq = entry.split('\n', 1)
-            seq = seq.replace("\n", "")
-            dic[header] = [i + 1, seq, special_chars(header), validate_seq(seq, type='protein')]
-        return dic
-
+        lines = file.readlines()
+    count = 0
+    fasta = {}
+    for line in lines:
+        line = line.replace('\n', '').strip()
+        if line[0] == '>':
+            header = line[1:]
+            seq = ''
+            count += 1
+            if header not in fasta.keys():
+                fasta[header] = [count, '', special_chars(header), '', False]
+            else:
+                fasta[header][4] = True
+                i = 1
+                while header in fasta.keys():
+                    header = f'{line[1:]} ({i})'
+                    i += 1
+                fasta[header] = [count, '', special_chars(header), '', True]
+        else:
+            seq += line
+            fasta[header][1] = seq
+            fasta[header][3] = validate_seq(seq, type='protein')
+    return fasta
 
 def parse_single_fasta(string):
     string = string.split('>', 1)[-1]
@@ -115,22 +129,3 @@ def seq_diff(afile, bfile):
     # print(f"Here they are: {blst}")
     print(f"Number of sequences present in both files: {len(clst)}")
     # print(f"Here they are: {clst}")
-
-
-def check_duplicates(filename):
-    with open(filename) as file:
-        lines = file.readlines()
-    count = 0
-    unique_set = set()
-    for l in lines:
-        if l[0] == '>':
-            count += 1
-            unique_set.add(l.replace('\n', '').strip())
-            if not count == len(unique_set):
-                print(l.replace('\n', '').strip())
-                count -= 1
-
-
-#check_duplicates('../../Desktop/ALOGs_aa.fasta')
-#seq_diff('../../Desktop/filtered_ALOGs.fa', '../../Desktop/ALOGs_aa.fasta')
-
