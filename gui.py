@@ -6,9 +6,130 @@ from main import parse_fasta
 from main import special_chars
 from main import validate_seq
 from main import parse_single_fasta
+from main import group_similar_strings
 
+# Set the minimum size for the window
 WINDOW_HEIGHT = 500
 WINDOW_WIDTH = 900
+
+# ----- GLOBAL VARIABLES -----
+# Base
+file = ''
+fasta = {}
+# Similarity Tool
+sim_lst = []
+
+# File Comparison Tool
+
+
+class CompLst:
+    # A CompLst is simply a list of three dictionaries: dictionary A through C.
+    # Dictionary A has the elements exclusive to A file, B to B file, and C to both files.
+    def __init__(self, lst):
+        self.lst = lst
+        self.lst_a = self.lst[0]
+        self.lst_b = self.lst[1]
+        self.lst_c = self.lst[2]
+
+    # run method for filling a CompLst
+    def run(self, bfile):
+        # Reference GLOBAL fasta to act as file number 1
+        global fasta
+        # ----- ERROR CHECKS -----
+        # If there is no main file loaded raise error
+        if not fasta:
+            raise_error('Please load a main file')
+        # If there is no second file loaded raise error
+        if not b_file:
+            raise_error('Please load a second file')
+        # ------------------------
+        # Initiate 3 empty dictionaries
+        a_lst = {}
+        b_lst = {}
+        c_lst = {}
+        # the parsed a and b files
+        af = fasta
+        bf = parse_fasta(bfile)
+        # For every element in A, check for their presence in B
+        # If they exist, add to C, else A
+        for ak, ai in af.items():
+            try:
+                # [[idxA, idxB], sequence, special_chars(header), validate_seq(sequence), Repeated(bool)]
+
+                # This confusion is to prevent an expansion of the first element of the list
+                # (the indexes for A and B files)
+                c_lst[ak] = [af[ak][0], list(bf.keys()).index(ak) + 1],\
+                            af[ak][1], af[ak][2], af[ak][3], af[ak][4]
+            except ValueError:
+                a_lst[ak] = ai
+        # For every element in B, check for their presence in A
+        for bk, bi in bf.items():
+            try:
+                list(af.keys()).index(bk)
+            except ValueError:
+                b_lst[bk] = bi
+
+        # Must update EVERY parameter of self
+        self.lst = [a_lst, b_lst, c_lst]
+        self.lst_a = a_lst
+        self.lst_b = b_lst
+        self.lst_c = c_lst
+        return self
+
+    # remove method to remove a given header from the CompLst class, from every dictionary
+    def remove(self, header):
+        try:
+            self.lst_a.pop(header)
+        except KeyError:
+            pass
+        try:
+            self.lst_b.pop(header)
+        except KeyError:
+            pass
+        try:
+            self.lst_c.pop(header)
+        except KeyError:
+            pass
+
+        return self
+
+    # update_tree method to update a TreeView, in this case the t_comp TreeView, given the CompLst
+    def update_tree(self):
+        # Remove everything in the tree before adding stuff
+        t_comp.delete(*t_comp.get_children())
+
+        # If TreeView option is not selected: return
+        if comp_file_action.current() != 2:
+            return
+
+        # comp_file_select:
+        # A (Current File)          0
+        # B (Other File)            1
+        # C (Both Files)            2
+        # A + B (Not in Both Files) 3
+        option = comp_file_select.current()
+
+        if option == 0:
+            for ak, ai in self.lst_a.items():
+                t_comp.insert('', 'end', text=ai[0], values=('', ak, ai[1]))
+        elif option == 1:
+            for bk, bi in self.lst_b.items():
+                t_comp.insert('', 'end', text='', values=(bi[0], bk, bi[1]))
+        elif option == 2:
+            for ck, ci in self.lst_c.items():
+                # remember that the very first item has two values for those in C: idxA and idxB
+                t_comp.insert('', 'end', text=ci[0][0], values=(ci[0][1], ck, ci[1]))
+        elif option == 3:
+            for ak, ai in self.lst_a.items():
+                t_comp.insert('', 'end', text=ai[0], values=('', ak, ai[1]))
+            for bk, bi in self.lst_b.items():
+                t_comp.insert('', 'end', text='', values=(bi[0], bk, bi[1]))
+
+
+# Initiate GLOBAL comp_lst
+comp_lst = CompLst([{}, {}, {}])
+
+# ----------------------------
 
 
 def donothing():
@@ -50,6 +171,7 @@ def update_trees(fasta):
     t_dup.delete(*t_dup.get_children())
     t_sc_header.delete(*t_sc_header.get_children())
     t_sc_seq.delete(*t_sc_seq.get_children())
+    t_sim.delete(*t_sim.get_children())
     for widget in n_headers.winfo_children():
         if isinstance(widget, (ttk.Combobox, ttk.Entry, ttk.Checkbutton)):
             widget.destroy()
@@ -102,6 +224,8 @@ def navigate(idxs):
             sc_frame.grid_remove()
             sim_frame.grid_remove()
             o2h_frame.grid_remove()
+            rnmr_frame.grid_remove()
+            comp_frame.grid_remove()
         # Check for Duplicates
         elif int(idx) == 2:
             overview_frame.grid_remove()
@@ -109,6 +233,8 @@ def navigate(idxs):
             sc_frame.grid_remove()
             sim_frame.grid_remove()
             o2h_frame.grid_remove()
+            rnmr_frame.grid_remove()
+            comp_frame.grid_remove()
         # Special Characters
         elif int(idx) == 3:
             overview_frame.grid_remove()
@@ -116,6 +242,8 @@ def navigate(idxs):
             sc_frame.grid()
             sim_frame.grid_remove()
             o2h_frame.grid_remove()
+            rnmr_frame.grid_remove()
+            comp_frame.grid_remove()
         # Group similar headers
         elif int(idx) == 4:
             overview_frame.grid_remove()
@@ -123,6 +251,8 @@ def navigate(idxs):
             sc_frame.grid_remove()
             sim_frame.grid()
             o2h_frame.grid_remove()
+            rnmr_frame.grid_remove()
+            comp_frame.grid_remove()
         # ORF to HMMER
         elif int(idx) == 5:
             overview_frame.grid_remove()
@@ -130,6 +260,24 @@ def navigate(idxs):
             sc_frame.grid_remove()
             sim_frame.grid_remove()
             o2h_frame.grid()
+            rnmr_frame.grid_remove()
+            comp_frame.grid_remove()
+        elif int(idx) == 6:
+            overview_frame.grid_remove()
+            dup_frame.grid_remove()
+            sc_frame.grid_remove()
+            sim_frame.grid_remove()
+            o2h_frame.grid_remove()
+            rnmr_frame.grid()
+            comp_frame.grid_remove()
+        elif int(idx) == 7:
+            overview_frame.grid_remove()
+            dup_frame.grid_remove()
+            sc_frame.grid_remove()
+            sim_frame.grid_remove()
+            o2h_frame.grid_remove()
+            rnmr_frame.grid_remove()
+            comp_frame.grid()
 
 
 def open_fasta(event):
@@ -259,12 +407,17 @@ def go_button(type):
     update_labels()
 
 
-def delete_seq(event):
+def delete_seq(tree, event):
     # Check for content inside Treeview before opening new window
     if not event.widget.selection():
         return
 
     global fasta
+    global sim_lst
+
+    # Get a list of the widgets children and then the index number of the selected item
+    tree_children = tree.get_children()
+    item_idx = tree_children.index(event.widget.focus())
 
     # Get the item that was clicked
     item_id = event.widget.focus()
@@ -273,17 +426,83 @@ def delete_seq(event):
     item = event.widget.item(item_id)
     header = item['values'][0]
     fasta.pop(header)
+    for lst in sim_lst:
+        try:
+            lst.remove(header)
+        except KeyError:
+            pass
 
+    # Update the trees and labels
     update_labels()
     update_trees(fasta)
+    fill_similarity_tree(0.5)
+
+    # Set the focus to be the same idx number
+    tree_children = tree.get_children()
+    # If we have not deleted the very last element present
+    if tree_children:
+        try:
+            tree.focus(tree_children[item_idx])
+            tree.selection_set(tree_children[item_idx])
+        # if we delete the last element we need to go back
+        except IndexError:
+            tree.focus(tree_children[item_idx - 1])
+            tree.selection_set(tree_children[item_idx - 1])
+
+
+def update_sim_message(event):
+    if not event:
+        return
+    col_width = sim_frame.grid_bbox(0, 0)[2]
+    sim_message.config(wraplength=col_width)
+
+
+def fill_similarity_tree(threshold):
+    global fasta
+    global sim_lst
+    if not sim_lst:
+        sim_lst = group_similar_strings(fasta.keys(), threshold)
+    if sim_lst:
+        t_sim.state(['!disabled'])
+        for i in range(len(sim_lst)):
+            if i != 0:
+                t_sim.insert('', 'end', text='---')
+            group = sim_lst[i]
+            for header in group:
+                t_sim.insert('', 'end', text=fasta[header][0], values=(header, fasta[header][1]))
+    else:
+        t_sim.state(['disabled'])
+
+
+def load_b_file():
+    global b_file
+    b_file.set(filedialog.askopenfilename())
+    if not b_file:
+        return
+
+
+def raise_error(text):
+    # Create an Error window
+    error_window = Toplevel(root, pady=20)
+    error_window.title('Error')
+    error_window.option_add('**tearOff', FALSE)
+    error_window.minsize(300, 180)
+    error_window.maxsize(300, 180)
+    error_window.columnconfigure(0, weight=1)
+    error_window.rowconfigure(0, weight=1)
+
+    # Add the content inside the new window
+    error_img = PhotoImage(file='./error.png')
+    error = Label(error_window, image=error_img, text=' '*6 + text, justify='left', compound='left')
+    error.image = error_img  # A must so the python garbage collector doesn't delete the image
+    error.grid(column=0, row=0, sticky='nsew', padx=20)
+    error_ok = Button(error_window, text='OK', command=error_window.destroy, anchor='center', width=8)
+    error_ok.grid(column=0, row=1)
 
 
 # Initiate
 root = Tk()
 root.title("Rnmr")
-
-file = ''
-fasta = {}
 
 # Set root and mainframe
 mainframe = ttk.Frame(root, padding="3 3 12 12")
@@ -331,14 +550,15 @@ file_button = Button(mainframe, text='Load', command=open_file)
 file_button.grid(column=2, row=0, sticky='W')
 
 # Listbox for actions
-options = ['Overview', 'Tools', '    Duplicates', '    Special Characters', '    Similar', '    O2H']
+options = ['Overview', 'Tools', '    Duplicates', '    Special Characters', '    Similar', '    O2H', '    Renamer',
+           '    Compare Files']
 optionsvar = StringVar(value=options)
 listbox = Listbox(mainframe, listvariable=optionsvar, selectmode='browse')
 listbox.grid(column=0, row=0, rowspan=2, sticky='NSW')
 # Add select to change the current options
 listbox.bind('<<ListboxSelect>>', lambda e: navigate(listbox.curselection()))
 
-# Overview Frame
+# ----- Overview Frame -----
 overview_frame = Frame(mainframe, borderwidth=2, relief='groove')
 overview_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
 overview_frame.grid_rowconfigure(0, weight=1)
@@ -358,9 +578,11 @@ t_overview.configure(yscrollcommand=t_slider.set)
 t_slider.grid(column=1, row=0, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
 t_overview.bind('<Double-1>', open_fasta)
+# Add a Delete event for removal of sequences
+t_overview.bind('<Delete>', lambda e: delete_seq(t_overview, e))
 
 
-# Duplicates Frame
+# ----- Duplicates Frame -----
 dup_frame = Frame(mainframe, borderwidth=2, relief='groove')
 dup_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
 dup_frame.grid_rowconfigure(1, weight=1)
@@ -382,13 +604,13 @@ t_dup.configure(yscrollcommand=t_dup_slider.set)
 t_dup_slider.grid(column=1, row=1, sticky='nse')
 # Add double click option on entry to open new window with FASTA
 t_dup.bind('<Double-1>', open_fasta)
-#
-t_dup.bind('<Delete>', delete_seq)
+# Add a Delete event for removal of sequences
+t_dup.bind('<Delete>', lambda e: delete_seq(t_dup, e))
 
 dup_frame.grid_remove()
 
 
-# Special Chars Frame
+# ----- Special Chars Frame -----
 sc_frame = Frame(mainframe, borderwidth=2, relief='groove')
 sc_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
 sc_frame.grid_rowconfigure(0, weight=1)
@@ -454,32 +676,96 @@ go_buttonS.state(['disabled'])
 sc_frame.grid_remove()
 
 
-# Similarity Frame
+# ----- Similarity Frame -----
 sim_frame = Frame(mainframe, borderwidth=2, relief='groove')
 sim_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
 sim_frame.grid_rowconfigure(1, weight=1)
 sim_frame.grid_columnconfigure(0, weight=1)
 sim_frame.grid_propagate(False)
 #
-sim_message = ttk.Label(sim_frame, text='Grouping very similar strings may take a while, so please press the Run'
-                                        ' button whenever you wish to run the analysis.')
+sim_message = ttk.Label(sim_frame,
+                        text='Grouping very similar strings may take a while, so please press the Run'
+                             ' button whenever you wish to run the analysis.')
 sim_message.grid(column=0, row=0, sticky='nw')
+sim_frame.bind('<Configure>', update_sim_message)
 #
-run_button = ttk.Button(sim_frame, text='Run', command=donothing)
+run_button = ttk.Button(sim_frame, text='Run', command=lambda: fill_similarity_tree(0.5))
 run_button.grid(column=1, row=0, sticky='ns')
 #
-t_sim = ttk.Treeview(sim_frame, columns=('h', 'hh'))
+t_sim = ttk.Treeview(sim_frame, columns='h')
+t_sim.heading('#0', text='#')
+t_sim.column('#0', width=50, stretch=False)
+t_sim.heading('h', text='Header')
+# Add a slider to the right
+t_sim_slider = ttk.Scrollbar(sim_frame, orient=VERTICAL, command=t_sim.yview)
+t_sim.configure(yscrollcommand=t_sim_slider.set)
+t_sim_slider.grid(column=1, row=1, sticky='NSE')
+
 t_sim.state(['disabled'])
 t_sim.grid(column=0, columnspan=2, row=1, sticky='nsew')
+
+# Add double click option on entry to open new window with FASTA
+t_sim.bind('<Double-1>', open_fasta)
+# Add a Delete event for removal of sequences
+t_sim.bind('<Delete>', lambda e: delete_seq(t_sim, e))
 
 sim_frame.grid_remove()
 
 
-# ORF2HMMER Frame
+# ----- ORF2HMMER Frame -----
 o2h_frame = Frame(mainframe, borderwidth=2, relief='groove')
 o2h_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
 
 o2h_frame.grid_remove()
+
+
+# ----- Renamer Frame -----
+rnmr_frame = Frame(mainframe, borderwidth=2, relief='groove')
+rnmr_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
+
+rnmr_frame.grid_remove()
+
+
+# ----- File Comparison Frame -----
+comp_frame = Frame(mainframe, borderwidth=2, relief='groove')
+comp_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
+comp_frame.grid_rowconfigure(3, weight=1)
+comp_frame.grid_columnconfigure(2, weight=1)
+comp_frame.grid_propagate(False)
+#
+comp_message = ttk.Label(comp_frame, text='Select another file for comparison:')
+comp_message.grid(column=0, row=0, sticky='nw')
+#
+b_file = StringVar(value='')
+comp_file_message = ttk.Label(comp_frame, textvariable=b_file)
+comp_file_message.grid(column=0, columnspan=4, row=1, sticky='nw')
+#
+comp_load = ttk.Button(comp_frame, text='Load', command=load_b_file)
+comp_load.grid(column=3, row=1, sticky='nse')
+#
+comp_file_select = ttk.Combobox(comp_frame, values=('A (Only in Current File)', 'B (Only in Other File)',
+                                                    'C (Present in Both)', 'A + B'))
+comp_file_select.grid(column=0, row=2, sticky='nsew')
+comp_file_action = ttk.Combobox(comp_frame, values=('Move', 'Copy', 'Treeview'))
+comp_file_action.grid(column=1, row=2, sticky='nsew')
+comp_file_entry = ttk.Entry(comp_frame)
+comp_file_entry.grid(column=2, row=2, sticky='nsew')
+comp_file_go = ttk.Button(comp_frame, text='Go', command=lambda: comp_lst.run(b_file.get()).update_tree())
+comp_file_go.grid(column=3, row=2, sticky='nsew')
+#
+t_comp = ttk.Treeview(comp_frame, columns=('#b', 'h'))
+t_comp.heading('#0', text='#A')
+t_comp.column('#0', width=50, stretch=False)
+t_comp.heading('#b', text='#B')
+t_comp.column('#b', width=50, stretch=False)
+t_comp.heading('h', text='Header')
+t_comp.grid(column=0, columnspan=4, row=3, sticky='nsew')
+#
+t_comp_slider = ttk.Scrollbar(comp_frame, orient=VERTICAL, command=t_comp.yview)
+t_comp.configure(yscrollcommand=t_comp_slider.set)
+t_comp_slider.grid(column=3, row=3, sticky='NSE')
+
+comp_frame.grid_remove()
 
 
 root.update_idletasks()

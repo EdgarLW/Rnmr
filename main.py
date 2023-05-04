@@ -67,7 +67,7 @@ def parse_single_fasta(string):
     return header, seq
 
 
-def group_similar_strings(dic, strings, similarity_threshold):
+def group_similar_strings(strings, similarity_threshold):
     groups = {}
     for s in strings:
         # Find similar strings using the SequenceMatcher
@@ -98,12 +98,7 @@ def group_similar_strings(dic, strings, similarity_threshold):
 
     # Get the unique sets from the dictionary
     unique_lst = sorted(list(unique_dict.values()), key=lambda k: sorted(list(k)))
-    for x in unique_lst:
-        lst = []
-        for s in x:
-            if dic[s] not in lst:
-                lst += [dic[s]]
-        print(x, len(lst) == 1)
+    return unique_lst
 
 
 def seq_diff(afile, bfile):
@@ -123,9 +118,4 @@ def seq_diff(afile, bfile):
             list(af.keys()).index(hb)
         except ValueError:
             blst[hb] = sb
-    print(f"Number of sequences exclusive to {afile}: {len(alst)}")
-    # print(f"Here they are: {alst}")
-    print(f"Number of sequences exclusive to {bfile}: {len(blst)}")
-    # print(f"Here they are: {blst}")
-    print(f"Number of sequences present in both files: {len(clst)}")
-    # print(f"Here they are: {clst}")
+    return alst, blst, clst
