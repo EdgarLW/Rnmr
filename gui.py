@@ -39,9 +39,11 @@ class CompLst:
         # If there is no main file loaded raise error
         if not fasta:
             raise_error('Please load a main file')
+            return self
         # If there is no second file loaded raise error
-        if not b_file:
+        if not bfile:
             raise_error('Please load a second file')
+            return self
         # ------------------------
         # Initiate 3 empty dictionaries
         a_lst = {}
@@ -93,21 +95,83 @@ class CompLst:
 
         return self
 
-    # update_tree method to update a TreeView, in this case the t_comp TreeView, given the CompLst
-    def update_tree(self):
-        # Remove everything in the tree before adding stuff
-        t_comp.delete(*t_comp.get_children())
-
-        # If TreeView option is not selected: return
-        if comp_file_action.current() != 2:
-            return
-
+    # action method to write to file or update a TreeView, in this case the t_comp TreeView, given the CompLst
+    def action(self):
         # comp_file_select:
         # A (Current File)          0
         # B (Other File)            1
         # C (Both Files)            2
         # A + B (Not in Both Files) 3
         option = comp_file_select.current()
+
+        # comp_file_action:
+        # Move      0
+        # Copy      1
+        # Treeview  2
+        action = comp_file_action.current()
+
+        # comp_file_entry:
+        # ttk.Entry (text)
+        to_file = comp_file_entry.get()
+
+        # ----- ERROR CHECKS -----
+        if option not in (0, 1, 2, 3):
+            raise_error('Please select a valid comparison option')
+            return
+        if action not in (0, 1, 2):
+            raise_error('Please select a valid comparison action')
+            return
+        if action != 2 and not to_file:
+            raise_error('Please input a destiny file name')
+            return
+        if option == 0 and not self.lst_a:
+            raise_error('There are no sequences unique to the current file')
+            return
+        if option == 1 and not self.lst_b:
+            raise_error('There are no sequences unique to the second file')
+            return
+        if option == 2 and not self.lst_c:
+            raise_error('The files do not present redundancies')
+            return
+        if option == 3 and not self.lst_a and not self.lst_b:
+            raise_error('The files are identical')
+            return
+        # ------------------------
+
+        # Move or Copy
+        if action in (0, 1):
+
+            out = ''
+
+            # A + B
+            if option == 3:
+                dictionaries = (self.lst_a, self.lst_b)
+            # Others
+            else:
+                dictionaries = self.lst[option]
+
+            # Write FASTA
+            for dic in dictionaries:
+                for k, v in dic.items():
+                    out += f'{k}\n{v[1]}\n'
+
+            # Append to file
+            with open(to_file, 'w') as file_out:
+                file_out.write(out)
+
+            # Move
+            if action == 0:
+                for dic in dictionaries:
+                    for k in dic.keys():
+                        self.remove(k)
+
+            # return to prevent from running the code below
+            return
+
+        # Treeview
+
+        # Remove everything in the tree before adding stuff
+        t_comp.delete(*t_comp.get_children())
 
         if option == 0:
             for ak, ai in self.lst_a.items():
@@ -198,7 +262,8 @@ def update_trees(fasta):
                 header_children.add(s)
         for i in range(len(header_children)):
             ttk.Checkbutton(n_headers, text=list(header_children)[i], width=6).grid(column=0, row=i + 2, padx=5, sticky='W')
-            ttk.Combobox(n_headers, values=('replace for', 'copy to file', 'move to file'), width=12).grid(column=1, row=i + 2, sticky='w')
+            ttk.Combobox(n_headers, values=('replace for', 'copy to file', 'move to file'), state='readonly', width=12)\
+                .grid(column=1, row=i + 2, sticky='w')
             ttk.Entry(n_headers).grid(column=2, row=i + 2, sticky='we')
     t_sc_seq_children = t_sc_seq.get_children()
     if t_sc_seq_children:
@@ -211,7 +276,8 @@ def update_trees(fasta):
                 seq_children.add(s)
         for i in range(len(seq_children)):
             ttk.Checkbutton(n_seqs, text=list(seq_children)[i]).grid(column=0, row=i + 2)
-            ttk.Combobox(n_seqs, values=('replace for', 'copy to file', 'move to file')).grid(column=1, row=i + 2)
+            ttk.Combobox(n_seqs, values=('replace for', 'copy to file', 'move to file'), state='readonly')\
+                .grid(column=1, row=i + 2)
             ttk.Entry(n_seqs).grid(column=2, row=i + 2, sticky='we')
 
 
@@ -488,18 +554,21 @@ def raise_error(text):
     error_window.option_add('**tearOff', FALSE)
     error_window.minsize(300, 180)
     error_window.maxsize(300, 180)
-    error_window.columnconfigure(0, weight=1)
+    error_window.columnconfigure(0, minsize=100)
+    error_window.columnconfigure(1, weight=1)
     error_window.rowconfigure(0, weight=1)
 
     # Add the content inside the new window
-    error_img = PhotoImage(file='./error.png')
-    error = Label(error_window, image=error_img, text=' '*6 + text, justify='left', compound='left')
+    error_img = PhotoImage(file='Assets/error.png')
+    error = Label(error_window, image=error_img)
     error.image = error_img  # A must so the python garbage collector doesn't delete the image
-    error.grid(column=0, row=0, sticky='nsew', padx=20)
+    error.grid(column=0, row=0, sticky='nsew')
+    error_text = Label(error_window, text=text, justify='center', wraplength=200)
+    error_text.grid(column=1, row=0, sticky='nsw')
     error_ok = Button(error_window, text='OK', command=error_window.destroy, anchor='center', width=8)
-    error_ok.grid(column=0, row=1)
+    error_ok.grid(column=0, columnspan=2, row=1)
 
-
+# ----- CONSTANT -------------------------------------------------------------------------------------------------------
 # Initiate
 root = Tk()
 root.title("Rnmr")
@@ -558,7 +627,7 @@ listbox.grid(column=0, row=0, rowspan=2, sticky='NSW')
 # Add select to change the current options
 listbox.bind('<<ListboxSelect>>', lambda e: navigate(listbox.curselection()))
 
-# ----- Overview Frame -----
+# ----- Overview Frame -------------------------------------------------------------------------------------------------
 overview_frame = Frame(mainframe, borderwidth=2, relief='groove')
 overview_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
 overview_frame.grid_rowconfigure(0, weight=1)
@@ -581,8 +650,9 @@ t_overview.bind('<Double-1>', open_fasta)
 # Add a Delete event for removal of sequences
 t_overview.bind('<Delete>', lambda e: delete_seq(t_overview, e))
 
+# We start at the overview, so no need to grid_remove
 
-# ----- Duplicates Frame -----
+# ----- Duplicates Frame -----------------------------------------------------------------------------------------------
 dup_frame = Frame(mainframe, borderwidth=2, relief='groove')
 dup_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
 dup_frame.grid_rowconfigure(1, weight=1)
@@ -609,8 +679,7 @@ t_dup.bind('<Delete>', lambda e: delete_seq(t_dup, e))
 
 dup_frame.grid_remove()
 
-
-# ----- Special Chars Frame -----
+# ----- Special Chars Frame --------------------------------------------------------------------------------------------
 sc_frame = Frame(mainframe, borderwidth=2, relief='groove')
 sc_frame.grid(column=1, columnspan=2, row=1, sticky='NSEW', padx=7)
 sc_frame.grid_rowconfigure(0, weight=1)
@@ -675,8 +744,7 @@ go_buttonS.state(['disabled'])
 
 sc_frame.grid_remove()
 
-
-# ----- Similarity Frame -----
+# ----- Similarity Frame -----------------------------------------------------------------------------------------------
 sim_frame = Frame(mainframe, borderwidth=2, relief='groove')
 sim_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
 sim_frame.grid_rowconfigure(1, weight=1)
@@ -711,48 +779,55 @@ t_sim.bind('<Delete>', lambda e: delete_seq(t_sim, e))
 
 sim_frame.grid_remove()
 
-
-# ----- ORF2HMMER Frame -----
+# ----- ORF2HMMER Frame ------------------------------------------------------------------------------------------------
 o2h_frame = Frame(mainframe, borderwidth=2, relief='groove')
 o2h_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
 
 o2h_frame.grid_remove()
 
-
-# ----- Renamer Frame -----
+# ----- Renamer Frame --------------------------------------------------------------------------------------------------
 rnmr_frame = Frame(mainframe, borderwidth=2, relief='groove')
 rnmr_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
 
 rnmr_frame.grid_remove()
 
-
-# ----- File Comparison Frame -----
+# ----- File Comparison Frame ------------------------------------------------------------------------------------------
 comp_frame = Frame(mainframe, borderwidth=2, relief='groove')
 comp_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
 comp_frame.grid_rowconfigure(3, weight=1)
 comp_frame.grid_columnconfigure(2, weight=1)
 comp_frame.grid_propagate(False)
-#
+
+# Very first message (reminder)
 comp_message = ttk.Label(comp_frame, text='Select another file for comparison:')
 comp_message.grid(column=0, row=0, sticky='nw')
-#
+
+# Shows current loaded b_file
 b_file = StringVar(value='')
 comp_file_message = ttk.Label(comp_frame, textvariable=b_file)
 comp_file_message.grid(column=0, columnspan=4, row=1, sticky='nw')
-#
+
+# Button to update b_file
 comp_load = ttk.Button(comp_frame, text='Load', command=load_b_file)
 comp_load.grid(column=3, row=1, sticky='nse')
-#
+
+# Combobox for what comparison to make
 comp_file_select = ttk.Combobox(comp_frame, values=('A (Only in Current File)', 'B (Only in Other File)',
-                                                    'C (Present in Both)', 'A + B'))
+                                                    'C (Present in Both)', 'A + B'), state='readonly')
 comp_file_select.grid(column=0, row=2, sticky='nsew')
-comp_file_action = ttk.Combobox(comp_frame, values=('Move', 'Copy', 'Treeview'))
+# Combobox for what action to take for a given comparison
+comp_file_action = ttk.Combobox(comp_frame, values=('Move', 'Copy', 'Treeview'), state='readonly')
 comp_file_action.grid(column=1, row=2, sticky='nsew')
+# Entry field to a possible Move or Copy action
 comp_file_entry = ttk.Entry(comp_frame)
 comp_file_entry.grid(column=2, row=2, sticky='nsew')
-comp_file_go = ttk.Button(comp_frame, text='Go', command=lambda: comp_lst.run(b_file.get()).update_tree())
+# The Go Button for running the above selected options
+comp_file_go = ttk.Button(comp_frame, text='Go', command=lambda: comp_lst.run(b_file.get()).action())
 comp_file_go.grid(column=3, row=2, sticky='nsew')
-#
+
+# t_comp is a Treeview for looking at the comparison of files
+#       Shown           |     Hidden
+# #A    #B    Header    |    Sequence
 t_comp = ttk.Treeview(comp_frame, columns=('#b', 'h'))
 t_comp.heading('#0', text='#A')
 t_comp.column('#0', width=50, stretch=False)
@@ -760,13 +835,15 @@ t_comp.heading('#b', text='#B')
 t_comp.column('#b', width=50, stretch=False)
 t_comp.heading('h', text='Header')
 t_comp.grid(column=0, columnspan=4, row=3, sticky='nsew')
-#
+
+# Add the classic slider
 t_comp_slider = ttk.Scrollbar(comp_frame, orient=VERTICAL, command=t_comp.yview)
 t_comp.configure(yscrollcommand=t_comp_slider.set)
+# One column in so it doesn't stick-out
 t_comp_slider.grid(column=3, row=3, sticky='NSE')
 
 comp_frame.grid_remove()
-
+# ----------------------------------------------------------------------------------------------------------------------
 
 root.update_idletasks()
 root.minsize(WINDOW_WIDTH, WINDOW_HEIGHT)
