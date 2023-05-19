@@ -24,6 +24,7 @@ def special_chars(string, database='[^0-9A-z_]'):
 def validate_seq(string, type):
     dic = {'DNA': 'ACTG',
            'PROTEIN': 'ACDEFGHIKLMNPQRSTVWY'}
+    string = string.upper()
     lst = []
     for c in range(len(string)):
         if string[c] not in dic[type.upper()]:

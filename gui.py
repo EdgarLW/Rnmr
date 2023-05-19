@@ -7,6 +7,7 @@ from main import special_chars
 from main import validate_seq
 from main import parse_single_fasta
 from main import group_similar_strings
+from difflib import SequenceMatcher
 
 # Set the minimum size for the window
 WINDOW_HEIGHT = 500
@@ -15,7 +16,99 @@ WINDOW_WIDTH = 900
 # ----- GLOBAL VARIABLES -----
 # Base
 file = ''
-fasta = {}
+
+
+class FastaFile:
+    # A Fasta class is a dictionary containing headers as keys and lists as values
+    # These lists present 5 entries:
+    # 0: Index - The index of the entry as an integer
+    # 1: Seq - The sequence of the fasta
+    # 2: special_chars of the Header - Runs special_chars on the header and returns a list of strings or None
+    # 3: validate_seq of Seq - Runs validate_seq on Seq and returns a list of strings or None
+    # 4: IsDup - A bool indicating if the sequence is a duplicate of another
+    def __init__(self, content):
+        self.content = content
+        self.headers = self.content.keys()
+        self.values = self.content.values()
+        self.items = self.content.items()
+
+    def update_trees(self):
+
+        # Delete the content inside the trees before updating each
+        t_overview.delete(*t_overview.get_children())
+        t_dup.delete(*t_dup.get_children())
+        t_sc_header.delete(*t_sc_header.get_children())
+        t_sc_seq.delete(*t_sc_seq.get_children())
+        t_sim.delete(*t_sim.get_children())
+
+        # Delete the widgets in Special Characters before updating them
+        # Headers Notebook
+        for widget in n_headers.winfo_children():
+            if isinstance(widget, (ttk.Combobox, ttk.Entry, ttk.Checkbutton)):
+                widget.destroy()
+        # Sequences Notebook
+        for widget in n_seqs.winfo_children():
+            if isinstance(widget, (ttk.Combobox, ttk.Entry, ttk.Checkbutton)):
+                widget.destroy()
+
+        # Add the content inside the trees
+        for header, values in self.items:
+            # OVERVIEW
+            # Index  Header  Length  |  Sequence
+            t_overview.insert('', 'end', text=values[0], values=[header, len(values[1]), values[1]])
+            # If there are any SCs in Header:
+            # HEADER SCs
+            # Index  Header SCs
+            if values[2]:
+                t_sc_header.insert('', 'end', text=values[0], values=[header, values[2]])
+            # If there are any SCs in Sequence:
+            # SEQUENCE SCs
+            # Index  Header  SCs
+            if values[3]:
+                t_sc_seq.insert('', 'end', text=values[0], values=[header, values[3]])
+            # If the sequence is a duplicate:
+            # DUPLICATES
+            # Index  Header  |  Sequence
+            if values[4]:
+                t_dup.insert('', 'end', text=values[0], values=[header, values[1]])
+
+        # Time to add the Widgets to SCs:
+        params = [[t_sc_header, go_buttonH, n_headers],
+                  [t_sc_seq, go_buttonS, n_seqs]]
+        # Run the loop twice, once for n_headers and the second for n_seqs
+        for i in range(2):
+            # Get the params
+            tree, button, master = params[i]
+            # The content
+            children = tree.get_children('')
+            # Return if nothing in it
+            if not children:
+                continue
+            # Set state to not disabled
+            button.state(['!disabled'])
+
+            # Create a set to use as a map to add widgets later
+            set_children = set()
+            for child in children:
+                sc = tree.item(child)['values'][1].split(' ')
+                for s in sc:
+                    set_children.add(s)
+
+            # Add the widgets for every entry in the set at row j + 2
+            for j in range(len(set_children)):
+                ttk.Checkbutton(master, text=list(set_children)[j], width=6)\
+                                .grid(column=0, row=j + 2, padx=5, sticky='W')
+                ttk.Combobox(master, values=('replace for', 'copy to file', 'move to file'), state='readonly',
+                             width=12) \
+                   .grid(column=1, row=j + 2, sticky='w')
+                ttk.Entry(master).grid(column=2, row=j + 2, sticky='we')
+
+
+# Initiate GLOBAL fasta
+fasta = FastaFile({})
+# GLOBAL sorting variables
+tree_sort_column = None
+tree_sort_reverse = False
 # Similarity Tool
 sim_lst = []
 
@@ -50,7 +143,7 @@ class CompLst:
         b_lst = {}
         c_lst = {}
         # the parsed a and b files
-        af = fasta
+        af = fasta.content
         bf = parse_fasta(bfile)
         # For every element in A, check for their presence in B
         # If they exist, add to C, else A
@@ -205,16 +298,16 @@ def open_file():
     file = filedialog.askopenfilename()
     if file:
         global fasta
-        fasta = parse_fasta(file)
+        fasta = FastaFile(parse_fasta(file))
         global file_label
         file_label.set('Current file: ' + file)
         update_labels()
-        update_trees(fasta)
+        fasta.update_trees()
 
 
 def update_labels():
     sc_h_count, sc_s_count, dup_count = 0, 0, 0
-    for entry in fasta.values():
+    for entry in fasta.values:
         i, seq, sc_h, sc_s, dup = entry
         if sc_h:
             sc_h_count += 1
@@ -228,57 +321,6 @@ def update_labels():
     seq_label.set(f'A total of {sc_s_count} sequences were detected with special characters!')
     global dup_label
     dup_label.set(f'A total of {dup_count} sequences were detected as duplicates!')
-
-
-def update_trees(fasta):
-    t_overview.delete(*t_overview.get_children())
-    t_dup.delete(*t_dup.get_children())
-    t_sc_header.delete(*t_sc_header.get_children())
-    t_sc_seq.delete(*t_sc_seq.get_children())
-    t_sim.delete(*t_sim.get_children())
-    for widget in n_headers.winfo_children():
-        if isinstance(widget, (ttk.Combobox, ttk.Entry, ttk.Checkbutton)):
-            widget.destroy()
-    for widget in n_seqs.winfo_children():
-        if isinstance(widget, (ttk.Combobox, ttk.Entry, ttk.Checkbutton)):
-            widget.destroy()
-    fasta = fasta.items()
-    for header, values in fasta:
-        t_overview.insert('', 'end', text=values[0], values=[header, len(values[1]), values[1]])
-        if values[2]:
-            t_sc_header.insert('', 'end', text=values[0], values=[header, values[2]])
-        if values[3]:
-            t_sc_seq.insert('', 'end', text=values[0], values=[header, values[3]])
-        if values[4]:
-            t_dup.insert('', 'end', text=values[0], values=[header, values[1]])
-    t_sc_header_children = t_sc_header.get_children()
-    if t_sc_header_children:
-        go_buttonH.state(['!disabled'])
-        header_children = set()
-        for child in t_sc_header_children:
-            sc = t_sc_header.item(child)['values'][1]
-            sc = set(sc.split(' '))
-            for s in sc:
-                header_children.add(s)
-        for i in range(len(header_children)):
-            ttk.Checkbutton(n_headers, text=list(header_children)[i], width=6).grid(column=0, row=i + 2, padx=5, sticky='W')
-            ttk.Combobox(n_headers, values=('replace for', 'copy to file', 'move to file'), state='readonly', width=12)\
-                .grid(column=1, row=i + 2, sticky='w')
-            ttk.Entry(n_headers).grid(column=2, row=i + 2, sticky='we')
-    t_sc_seq_children = t_sc_seq.get_children()
-    if t_sc_seq_children:
-        go_buttonS.state(['!disabled'])
-        seq_children = set()
-        for child in t_sc_seq_children:
-            sc = t_sc_seq.item(child)['values'][1]
-            sc = set(sc.split(' '))
-            for s in sc:
-                seq_children.add(s)
-        for i in range(len(seq_children)):
-            ttk.Checkbutton(n_seqs, text=list(seq_children)[i]).grid(column=0, row=i + 2)
-            ttk.Combobox(n_seqs, values=('replace for', 'copy to file', 'move to file'), state='readonly')\
-                .grid(column=1, row=i + 2)
-            ttk.Entry(n_seqs).grid(column=2, row=i + 2, sticky='we')
 
 
 def navigate(idxs):
@@ -346,133 +388,6 @@ def navigate(idxs):
             comp_frame.grid()
 
 
-def open_fasta(event):
-    # Check for content inside Treeview before opening new window
-    if not event.widget.selection():
-        return
-
-    global fasta
-
-    # Get the item that was clicked
-    item_id = event.widget.focus()
-
-    # Get the values of the item
-    item = event.widget.item(item_id)
-    values = item['values']
-
-    # Create and display the new window
-    new_window = Toplevel(root)
-    new_window.title(f"{values[0]}")
-    new_window.columnconfigure(0, weight=1)
-    new_window.rowconfigure(0, weight=1)
-    newframe = ttk.Frame(new_window, padding="3 3 7 0")
-    newframe.grid(column=0, row=0, sticky='NSEW')
-    new_window.option_add('**tearOff', FALSE)
-
-    # Add the content inside the new window
-    # Entry (text)
-    entry = Text(newframe)
-    entry.configure()
-    entry.insert('1.0', f'>{values[0]}\n{fasta[values[0]][1]}')
-    entry.grid(column=0, row=0, sticky='NSEW')
-
-    # Button for Saving
-    save_button = Button(newframe, text='Save', width=10,
-                         command=lambda: save_fasta(parse_single_fasta(entry.get('1.0', 'end')),
-                                                    window=new_window, save=True))
-    save_button.grid(column=0, row=1, pady=7, sticky='NES')
-
-    # Set minimum size
-    new_window.update_idletasks()
-    new_window.minsize(new_window.winfo_width(), new_window.winfo_height())
-
-
-def save_fasta(text, window=None, type=None, replace=None, save=False):
-    new_header, seq = text
-    if window is None:
-        if type == 'H':
-            old_header = new_header
-            new_header = new_header.replace(replace[0], replace[1])
-        elif type == 'S':
-            old_header = new_header
-            seq = seq.replace(replace[0], replace[1])
-        else:
-            return 'type variable required'
-    else:
-        old_header = window.title()
-    global fasta
-    if old_header != new_header:
-        new_fasta = {}
-        for key, value in fasta.items():
-            if value[0] == fasta[old_header][0]:
-                new_fasta[new_header] = [value[0],
-                                         seq,
-                                         special_chars(new_header),
-                                         validate_seq(seq, type='protein')]
-            else:
-                new_fasta[key] = value
-        fasta = new_fasta
-        if window:
-            window.title(f"{new_header}")
-    else:
-        fasta[old_header][1] = seq
-        fasta[old_header][2] = special_chars(new_header)
-        fasta[old_header][3] = validate_seq(seq, type='protein')
-    if save:
-        update_trees(fasta)
-        update_labels()
-
-
-def go_button(type):
-    check_list = []
-    combo_list = []
-    entry_list = []
-    if type == 'H':
-        notebook = n_headers
-    else:
-        notebook = n_seqs
-    for widget in notebook.winfo_children():
-        if isinstance(widget, tkinter.ttk.Checkbutton):
-            check_list.append(widget)
-        elif isinstance(widget, tkinter.ttk.Combobox):
-            combo_list.append(widget)
-        elif isinstance(widget, tkinter.ttk.Entry):
-            entry_list.append(widget)
-    children = []
-    for check, choice, text in zip(check_list, combo_list, entry_list):
-        if check.state() == ('selected',):
-            if type == 'H':
-                t = t_sc_header
-                t_children = t_sc_header.get_children()
-            else:
-                t = t_sc_seq
-                t_children = t_sc_seq.get_children()
-            for child in t_children:
-                children.append(t.item(child)['values'][0])
-            if choice.current() == 0:
-                for child in children:
-                    seq = fasta[child][1]
-                    rep = str(check.cget('text'))
-                    if rep == 'Space':
-                        rep = ' '
-                    save_fasta((child, seq), type=type, replace=(rep, text.get()))
-            elif choice.current() == 1:
-                out = ''
-                for child in children:
-                    out += f'>{child}\n{fasta[child][1]}\n'
-                with open(text.get(), 'a') as file:
-                    file.write(out)
-            elif choice.current() == 2:
-                out = ''
-                for child in children:
-                    out += f'>{child}\n{fasta[child][1]}\n'
-                    fasta.pop(child)
-                with open(text.get(), 'a') as file:
-                    file.write(out)
-    update_trees(fasta)
-    update_labels()
-
-
 def delete_seq(tree, event):
     # Check for content inside Treeview before opening new window
     if not event.widget.selection():
@@ -491,7 +406,7 @@ def delete_seq(tree, event):
     # Get the values of the item
     item = event.widget.item(item_id)
     header = item['values'][0]
-    fasta.pop(header)
+    fasta.content.pop(header)
     for lst in sim_lst:
         try:
             lst.remove(header)
@@ -500,7 +415,7 @@ def delete_seq(tree, event):
 
     # Update the trees and labels
     update_labels()
-    update_trees(fasta)
+    fasta.update_trees()
     fill_similarity_tree(0.5)
 
     # Set the focus to be the same idx number
@@ -527,7 +442,7 @@ def fill_similarity_tree(threshold):
     global fasta
     global sim_lst
     if not sim_lst:
-        sim_lst = group_similar_strings(fasta.keys(), threshold)
+        sim_lst = group_similar_strings(fasta.headers, threshold)
     if sim_lst:
         t_sim.state(['!disabled'])
         for i in range(len(sim_lst)):
@@ -535,7 +450,7 @@ def fill_similarity_tree(threshold):
                 t_sim.insert('', 'end', text='---')
             group = sim_lst[i]
             for header in group:
-                t_sim.insert('', 'end', text=fasta[header][0], values=(header, fasta[header][1]))
+                t_sim.insert('', 'end', text=fasta.content[header][0], values=(header, fasta.content[header][1]))
     else:
         t_sim.state(['disabled'])
 
@@ -567,6 +482,216 @@ def raise_error(text):
     error_text.grid(column=1, row=0, sticky='nsw')
     error_ok = Button(error_window, text='OK', command=error_window.destroy, anchor='center', width=8)
     error_ok.grid(column=0, columnspan=2, row=1)
+
+
+def open_window(event):
+    # Check for content inside Treeview before opening new window
+    if not event.widget.selection():
+        return
+
+    global fasta
+
+    # Get the item that was clicked
+    item_id = event.widget.focus()
+
+    # Get the values of the item
+    item = event.widget.item(item_id)
+    values = item['values']
+
+    # Create and display the new window
+    new_window = Toplevel(root)
+    new_window.title(f"{values[0]}")
+    new_window.columnconfigure(0, weight=1)
+    new_window.rowconfigure(0, weight=1)
+    new_frame = ttk.Frame(new_window, padding="3 3 7 0")
+    new_frame.grid(column=0, row=0, sticky='NSEW')
+    new_window.option_add('**tearOff', FALSE)
+
+    # Add the content inside the new window
+    # Entry (text)
+    entry = Text(new_frame)
+    entry.configure()
+    entry.insert('1.0', f'>{values[0]}\n{fasta.content[values[0]][1]}')
+    entry.grid(column=0, row=0, sticky='NSEW')
+
+    # Button for Saving
+    save_button = Button(new_frame, text='Save', width=10,
+                         command=lambda: func_save_button(entry, inWindow=new_window, save=True))
+    save_button.grid(column=0, row=1, pady=7, sticky='NES')
+
+    # Set minimum size
+    new_window.update_idletasks()
+    new_window.minsize(new_window.winfo_width(), new_window.winfo_height())
+
+
+def func_save_button(entry, inWindow=None, save=False):
+
+    global fasta
+    if inWindow:
+        # Saves the alterations made
+        new_header, seq = parse_single_fasta(entry.get('1.0', 'end'))
+        # Gets the old header
+        old_header = str(inWindow.title())
+
+    # If not inWindow that means it was called from GO Button
+    else:
+        type, f1, f2 = entry
+        if type:
+            old_header = f1
+            new_header = f2
+            seq = fasta.content[f1][1]
+        else:
+            old_header = new_header = f1
+            seq = f2
+
+    # If there were no alterations made, return
+    if old_header == new_header and fasta.content[old_header][1] == seq:
+        return
+
+    for value in fasta.values:
+        # When the match is found
+        if value[0] == fasta.content[old_header][0]:
+            # Create a new entry
+            fasta.content[new_header] = [value[0],
+                                         seq,
+                                         special_chars(new_header),
+                                         validate_seq(seq, type='protein'),
+                                         value[4]]
+            # And remove the old one if in header mode
+            if type:
+                fasta.content.pop(old_header)
+            break
+
+    # Set the updated title
+    if inWindow:
+        inWindow.title(f"{new_header}")
+
+    # Order the dictionary
+    fasta.content = {k: v for k, v in sorted(fasta.content.items(), key=lambda x: x[1][0])}
+    fasta.header = fasta.content.keys()
+    fasta.values = fasta.content.values()
+    fasta.items = fasta.content.items()
+
+    # Updates
+    if save:
+        fasta.update_trees()
+        update_labels()
+
+
+def go_button(type):
+
+    # type (bool)
+    # True --> Header
+    # False --> Sequence
+
+    # Make 3 empty lists for the widgets in SC
+    check_list = []
+    combo_list = []
+    entry_list = []
+
+    # Check for what notebook we are in
+    if type:
+        notebook = n_headers
+        t = t_sc_header
+        t_children = [t.item(x)['values'][0] for x in t.get_children()]
+    else:
+        notebook = n_seqs
+        t = t_sc_seq
+        t_children = [t.item(x)['values'][0] for x in t.get_children()]
+
+    # For every widget in the frame, check for their types to add to the lists
+    for widget in notebook.winfo_children():
+        if isinstance(widget, tkinter.ttk.Checkbutton):
+            check_list.append(widget)
+        elif isinstance(widget, tkinter.ttk.Combobox):
+            combo_list.append(widget)
+        elif isinstance(widget, tkinter.ttk.Entry):
+            entry_list.append(widget)
+
+    # For every widget line
+    for check, choice, text in zip(check_list, combo_list, entry_list):
+        # If not selected, return
+        if check.state() != ('selected',):
+            continue
+
+        # choice
+        # replace       0
+        # copy to file  1
+        # move to file  2
+
+        # replace
+        if choice.current() == 0:
+            # Get the text to replace
+            rep = check.cget('text')
+            # For every header
+            for child in t_children:
+                # If the text is Space get the real deal
+                if rep == 'Space':
+                    rep = ' '
+                if type:
+                    func_save_button((type, child, child.replace(rep, text.get())), save=False)
+                else:
+                    func_save_button((type, child, fasta.content[child][1].replace(rep, text.get())), save=False)
+
+        # copy to file / move to file
+        elif choice.current() in (1, 2):
+            out = ''
+            for child in t_children:
+                out += f'>{child}\n{fasta.content[child][1]}\n'
+                # if move to file
+                if choice.current() == 2:
+                    fasta.content.pop(child)
+            with open(text.get(), 'a') as file:
+                file.write(out)
+
+    # Update
+    fasta.update_trees()
+    update_labels()
+
+
+def dup_seq_go():
+
+    global fasta
+
+    list1 = list(fasta.headers)
+    list2 = list1.copy()
+    x = 1
+
+    for i in range(len(list1)):
+        for j in range(i + 1, len(list2)):
+            ratio = SequenceMatcher(None, fasta.content[list1[i]][1], fasta.content[list2[j]][1]).quick_ratio()
+            if ratio > 0.95:
+                t_dup_seq.insert('', 'end', text=str(x), values=[f'{list1[i]} is {round(ratio*100, 1)}% identical to {list2[j]}'])
+                x += 1
+
+    fasta.update_trees()
+    update_labels()
+
+
+def sort_tree(tree, col, data_type):
+
+    global tree_sort_column, tree_sort_reverse
+
+    if col == tree_sort_column:
+        tree_sort_reverse = not tree_sort_reverse
+    else:
+        tree_sort_reverse = False
+
+    tree_sort_column = col
+
+    try:
+        column_index = tree['columns'].index(col)
+        if data_type == 'int':
+            data = [(int(tree.item(child)['values'][column_index]), child) for child in tree.get_children('')]
+        else:
+            data = [(tree.item(child)['values'][column_index], child) for child in tree.get_children('')]
+        data.sort(reverse=tree_sort_reverse)
+    except ValueError:
+        data = [(int(tree.item(child)['text']), child) for child in tree.get_children('')]  # Display column #0 cannot be set
+        data.sort(reverse=tree_sort_reverse)
+
+    for index, (value, child) in enumerate(data):
+        tree.move(child, '', index)
 
 # ----- CONSTANT -------------------------------------------------------------------------------------------------------
 # Initiate
@@ -634,11 +759,11 @@ overview_frame.grid_rowconfigure(0, weight=1)
 overview_frame.grid_columnconfigure(0, weight=1)
 # Overview action
 t_overview = ttk.Treeview(overview_frame, columns=('header', 'length'))
-t_overview.heading('#0', text='#')
+t_overview.heading('#0', text='#', command=lambda: sort_tree(t_overview, '#0', 'int'))
 t_overview.column('#0', width=50, anchor='w', stretch=False)
-t_overview.heading('header', text='Header')
+t_overview.heading('header', text='Header', command=lambda: sort_tree(t_overview, 'header', 'str'))
 t_overview.column('header', anchor='w')
-t_overview.heading('length', text='Length')
+t_overview.heading('length', text='Length', command=lambda: sort_tree(t_overview, 'length', 'int'))
 t_overview.column('length', anchor='w')
 t_overview.grid(column=0, row=0, sticky='NSEW', pady=1)
 # Add a slider to the right
@@ -646,7 +771,7 @@ t_slider = ttk.Scrollbar(overview_frame, orient=VERTICAL, command=t_overview.yvi
 t_overview.configure(yscrollcommand=t_slider.set)
 t_slider.grid(column=1, row=0, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
-t_overview.bind('<Double-1>', open_fasta)
+t_overview.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
 t_overview.bind('<Delete>', lambda e: delete_seq(t_overview, e))
 
@@ -659,23 +784,59 @@ dup_frame.grid_rowconfigure(1, weight=1)
 dup_frame.grid_columnconfigure(0, weight=1)
 dup_frame.grid_propagate(False)
 #
-dup_label = StringVar(value='Please select a file')
-dup_dup_label = ttk.Label(dup_frame, textvariable=dup_label)
-dup_dup_label.grid(column=0, columnspan=4, row=0, sticky='nw', ipadx=5)
+dup_notebook = ttk.Notebook(dup_frame)
+dup_notebook.grid(column=0, row=1, columnspan=2, sticky='NSEW')
 #
-t_dup = ttk.Treeview(dup_frame, columns='h')
-t_dup.heading('#0', text='#')
+dup_headers = ttk.Frame(dup_notebook)
+dup_headers.grid_rowconfigure(1, weight=1)
+dup_headers.grid_columnconfigure(0, weight=1)
+dup_notebook.add(dup_headers, text='Headers')
+#
+dup_label = StringVar(value='Please select a file')
+dup_dup_label = ttk.Label(dup_headers, textvariable=dup_label)
+dup_dup_label.grid(column=0, columnspan=2, row=0, sticky='nw', ipadx=5)
+#
+t_dup = ttk.Treeview(dup_headers, columns='h')
+t_dup.heading('#0', text='#', command=lambda: sort_tree(t_dup, '#0', 'int'))
 t_dup.column('#0', width=50, stretch=False)
-t_dup.heading('h', text='Header')
+t_dup.heading('h', text='Header', command=lambda: sort_tree(t_dup, 'h', 'str'))
 t_dup.grid(column=0, columnspan=4, row=1, sticky='nsew')
 #
-t_dup_slider = ttk.Scrollbar(dup_frame, orient=VERTICAL, command=t_dup.yview)
-t_dup.configure(yscrollcommand=t_dup_slider.set)
-t_dup_slider.grid(column=1, row=1, sticky='nse')
+t_dup_slider_h = ttk.Scrollbar(dup_headers, orient=VERTICAL, command=t_dup.yview)
+t_dup.configure(yscrollcommand=t_dup_slider_h.set)
+t_dup_slider_h.grid(column=1, row=1, sticky='nse')
 # Add double click option on entry to open new window with FASTA
-t_dup.bind('<Double-1>', open_fasta)
+t_dup.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
 t_dup.bind('<Delete>', lambda e: delete_seq(t_dup, e))
+
+# SEQUENCES
+dup_seqs = ttk.Frame(dup_notebook)
+dup_seqs.grid_rowconfigure(1, weight=1)
+dup_seqs.grid_columnconfigure(0, weight=1)
+dup_notebook.add(dup_seqs, text='Sequences')
+# Combobox for what comparison to make
+comp_file_select = ttk.Combobox(dup_seqs, values=('U (Uniques)', 'D (Duplicates)', 'U + D'), state='readonly')
+comp_file_select.grid(column=0, row=0, sticky='nsew')
+# Combobox for what action to take for a given comparison
+comp_file_action = ttk.Combobox(dup_seqs, values=('Move', 'Copy', 'Treeview'), state='readonly')
+comp_file_action.grid(column=1, row=0, sticky='nsew')
+# Entry field to a possible Move or Copy action
+comp_file_entry = ttk.Entry(dup_seqs)
+comp_file_entry.grid(column=2, row=0, sticky='nsew')
+# The Go Button for running the above selected options
+comp_file_go = ttk.Button(dup_seqs, text='Go', command=dup_seq_go)
+comp_file_go.grid(column=3, row=0, sticky='nsew')
+# Treeview
+t_dup_seq = ttk.Treeview(dup_seqs, columns='s')
+t_dup_seq.heading('#0', text='#', command=lambda: sort_tree(t_dup_seq, '#0', 'int'))
+t_dup_seq.column('#0', width=50, stretch=False)
+t_dup_seq.heading('s', text='Sequences', command=lambda: sort_tree(t_dup_seq, 's', 'str'))
+t_dup_seq.grid(column=0, columnspan=4, row=1, sticky='nsew')
+# Add a slider to the right
+t_dup_slider_s = ttk.Scrollbar(dup_seqs, orient=VERTICAL, command=t_dup_seq.yview)
+t_dup_seq.configure(yscrollcommand=t_dup_slider_s.set)
+t_dup_slider_s.grid(column=3, row=1, sticky='NSE')
 
 dup_frame.grid_remove()
 
@@ -700,9 +861,9 @@ head_label = StringVar(value='Please select a file')
 sc_head_label = ttk.Label(n_headers, textvariable=head_label)
 sc_head_label.grid(column=0, columnspan=4, row=0, sticky='NW', ipadx=5)
 t_sc_header = ttk.Treeview(n_headers, columns=('h', 'sc'))
-t_sc_header.heading('#0', text='#')
+t_sc_header.heading('#0', text='#', command=lambda: sort_tree(t_sc_header, '#0', 'int'))
 t_sc_header.column('#0', width=50, stretch=False)
-t_sc_header.heading('h', text='Header')
+t_sc_header.heading('h', text='Header', command=lambda: sort_tree(t_sc_header, 'h', 'str'))
 t_sc_header.heading('sc', text='Special Characters')
 t_sc_header.column('sc', width=0)
 t_sc_header.grid(column=0, columnspan=4, row=1, sticky='NSEW')
@@ -711,10 +872,10 @@ t_sc_header_slider = ttk.Scrollbar(n_headers, orient=VERTICAL, command=t_sc_head
 t_sc_header.configure(yscrollcommand=t_sc_header_slider.set)
 t_sc_header_slider.grid(column=3, row=1, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
-t_sc_header.bind('<Double-1>', open_fasta)
+t_sc_header.bind('<Double-1>', open_window)
 
 # Go Button
-go_buttonH = ttk.Button(n_headers, text='Go', command=lambda: go_button('H'))
+go_buttonH = ttk.Button(n_headers, text='Go', command=lambda: go_button(True))
 go_buttonH.grid(column=3, row=2, rowspan=1000, sticky='NSE')
 go_buttonH.state(['disabled'])
 
@@ -724,9 +885,9 @@ seq_label = StringVar(value='Please select a file')
 seq_head_label = ttk.Label(n_seqs, textvariable=seq_label)
 seq_head_label.grid(column=0, columnspan=4, row=0, sticky='NW', ipadx=5)
 t_sc_seq = ttk.Treeview(n_seqs, columns=('h', 'sc'))
-t_sc_seq.heading('#0', text='#')
+t_sc_seq.heading('#0', text='#', command=lambda: sort_tree(t_sc_seq, '#0', 'int'))
 t_sc_seq.column('#0', width=50, stretch=False)
-t_sc_seq.heading('h', text='Header')
+t_sc_seq.heading('h', text='Header', command=lambda: sort_tree(t_sc_seq, 'h', 'str'))
 t_sc_seq.heading('sc', text='Special Characters')
 t_sc_seq.column('sc', width=0)
 t_sc_seq.grid(column=0, columnspan=4, row=1, sticky='NSEW')
@@ -735,10 +896,10 @@ t_sc_seq_slider = ttk.Scrollbar(n_seqs, orient=VERTICAL, command=t_sc_seq.yview)
 t_sc_seq.configure(yscrollcommand=t_sc_seq_slider.set)
 t_sc_seq_slider.grid(column=3, row=1, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
-t_sc_seq.bind('<Double-1>', open_fasta)
+t_sc_seq.bind('<Double-1>', open_window)
 
 # Go Button
-go_buttonS = ttk.Button(n_seqs, text='Go', command=lambda: go_button('S'))
+go_buttonS = ttk.Button(n_seqs, text='Go', command=lambda: go_button(False))
 go_buttonS.grid(column=3, row=2, rowspan=1000, sticky='NSE')
 go_buttonS.state(['disabled'])
 
@@ -773,7 +934,7 @@ t_sim.state(['disabled'])
 t_sim.grid(column=0, columnspan=2, row=1, sticky='nsew')
 
 # Add double click option on entry to open new window with FASTA
-t_sim.bind('<Double-1>', open_fasta)
+t_sim.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
 t_sim.bind('<Delete>', lambda e: delete_seq(t_sim, e))
 
@@ -829,11 +990,11 @@ comp_file_go.grid(column=3, row=2, sticky='nsew')
 #       Shown           |     Hidden
 # #A    #B    Header    |    Sequence
 t_comp = ttk.Treeview(comp_frame, columns=('#b', 'h'))
-t_comp.heading('#0', text='#A')
+t_comp.heading('#0', text='#A', command=lambda: sort_tree(t_comp, '#0', 'int'))
 t_comp.column('#0', width=50, stretch=False)
-t_comp.heading('#b', text='#B')
+t_comp.heading('#b', text='#B', command=lambda: sort_tree(t_comp, '#b', 'int'))
 t_comp.column('#b', width=50, stretch=False)
-t_comp.heading('h', text='Header')
+t_comp.heading('h', text='Header', command=lambda: sort_tree(t_comp, 'h', 'str'))
 t_comp.grid(column=0, columnspan=4, row=3, sticky='nsew')
 
 # Add the classic slider
