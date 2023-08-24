@@ -8,6 +8,8 @@ from main import validate_seq
 from main import parse_single_fasta
 from main import group_similar_strings
 from difflib import SequenceMatcher
+from regex_gp import *
+import re
 
 # Set the minimum size for the window
 WINDOW_HEIGHT = 500
@@ -16,6 +18,7 @@ WINDOW_WIDTH = 900
 # ----- GLOBAL VARIABLES -----
 # Base
 file = ''
+config_file = './config.txt'
 
 
 class FastaFile:
@@ -103,6 +106,9 @@ class FastaFile:
                    .grid(column=1, row=j + 2, sticky='w')
                 ttk.Entry(master).grid(column=2, row=j + 2, sticky='we')
 
+        fasta.headers = fasta.content.keys()
+        fasta.values = fasta.content.values()
+
 
 # Initiate GLOBAL fasta
 fasta = FastaFile({})
@@ -111,6 +117,8 @@ tree_sort_column = None
 tree_sort_reverse = False
 # Similarity Tool
 sim_lst = []
+# Renaming Tool
+renames = []
 
 # File Comparison Tool
 
@@ -246,7 +254,7 @@ class CompLst:
             # Write FASTA
             for dic in dictionaries:
                 for k, v in dic.items():
-                    out += f'{k}\n{v[1]}\n'
+                    out += f'>{k}\n{v[1]}\n'
 
             # Append to file
             with open(to_file, 'w') as file_out:
@@ -397,11 +405,12 @@ def delete_seq(tree, event):
     global sim_lst
 
     # Get a list of the widgets children and then the index number of the selected item
-    tree_children = tree.get_children()
-    item_idx = tree_children.index(event.widget.focus())
+    tree_children = tree.get_children('')
 
     # Get the item that was clicked
     item_id = event.widget.focus()
+
+    item_idx = tree_children.index(event.widget.focus())
 
     # Get the values of the item
     item = event.widget.item(item_id)
@@ -416,7 +425,7 @@ def delete_seq(tree, event):
     # Update the trees and labels
     update_labels()
     fasta.update_trees()
-    fill_similarity_tree(0.5)
+    #fill_similarity_tree(0.5)
 
     # Set the focus to be the same idx number
     tree_children = tree.get_children()
@@ -532,6 +541,8 @@ def func_save_button(entry, inWindow=None, save=False):
         new_header, seq = parse_single_fasta(entry.get('1.0', 'end'))
         # Gets the old header
         old_header = str(inWindow.title())
+        #
+        type = True
 
     # If not inWindow that means it was called from GO Button
     else:
@@ -649,7 +660,10 @@ def go_button(type):
     update_labels()
 
 
-def dup_seq_go():
+def dup_seq_go(threshold):
+
+    # Delete the content inside the trees before updating each
+    t_dup_seq.delete(*t_dup_seq.get_children())
 
     global fasta
 
@@ -660,7 +674,7 @@ def dup_seq_go():
     for i in range(len(list1)):
         for j in range(i + 1, len(list2)):
             ratio = SequenceMatcher(None, fasta.content[list1[i]][1], fasta.content[list2[j]][1]).quick_ratio()
-            if ratio > 0.95:
+            if ratio >= threshold/100:
                 t_dup_seq.insert('', 'end', text=str(x), values=[f'{list1[i]} is {round(ratio*100, 1)}% identical to {list2[j]}'])
                 x += 1
 
@@ -692,6 +706,144 @@ def sort_tree(tree, col, data_type):
 
     for index, (value, child) in enumerate(data):
         tree.move(child, '', index)
+
+
+def extract_ids():
+
+    global fasta
+
+    if not fasta.content:
+        raise_error('Please open a file first')
+
+    id_regex = re.compile('ID=[a-zA-Z0-9_.]*')
+    locus_regex = re.compile('locus=[a-zA-Z0-9_.]*')
+    gene_regex = re.compile('gene:[a-zA-Z0-9_.]*')
+
+    for header in list(fasta.headers):
+        if re.search(id_regex, header):
+            match = re.search(id_regex, header)
+            func_save_button((True, header, match.group(0)[3:]))
+        elif re.search(locus_regex, header):
+            match = re.search(locus_regex, header)
+            func_save_button((True, header, match.group(0)[6:]))
+        elif re.search(gene_regex, header):
+            match = re.search(gene_regex, header)
+            func_save_button((True, header, match.group(0)[5:]))
+        else:
+            func_save_button((True, header, header.split(' ')[0]))
+
+    fasta.update_trees()
+    update_labels()
+
+
+# translate_entry( str ->  )
+def translate_entry():
+
+    global config_file
+
+    with open(config_file) as file:
+        lines = file.readlines()
+
+    global renames
+
+    renames = []
+
+    for line in lines:
+        line = line.split(',')
+        renames.append(line)
+
+    global fasta
+
+    for item in renames:
+        genus, species = item[0].split(' ')
+        re_gex = item[1]
+        pattern = re.compile(re_gex)
+
+        for header in list(fasta.headers):
+            # When a match is found
+            if re.search(pattern, header) and header[:6] != f'{genus[:2]}{species[:3]}_':
+                func_save_button((True, header, f'{genus[:2]}{species[:3]}_{header}'))
+
+    fasta.update_trees()
+    update_labels()
+
+
+def load_configure():
+    global config_file
+    config_file = filedialog.askopenfilename()
+    rnmr_label.set('Configuration file: ' + config_file)
+    if not rnmr_label:
+        return
+
+
+def open_cfg_window():
+    # Create and display the new window
+    cfg_window = Toplevel(root)
+    cfg_window.title('Add to Config')
+    # cfg_window.columnconfigure(2, weight=1)
+    cfg_window.rowconfigure(3, weight=1)
+    cfg_frame = ttk.Frame(cfg_window, padding="3 3 7 0")
+    cfg_frame.grid(column=0, row=0, sticky='NSEW')
+    cfg_window.option_add('**tearOff', FALSE)
+    cfg_window.minsize(500, 180)
+    cfg_window.maxsize(500, 180)
+
+    # Add the content inside the new window
+    # Label (Species)
+    cfg_species = Label(cfg_frame, text='Species:')
+    cfg_species.grid(column=0, row=0, sticky='nsew')
+
+    # Entry (Species)
+    entry_species = Text(cfg_frame, height=1, width=52)
+    entry_species.grid(column=1, row=0, sticky='NEW')
+
+    # Label (Regex)
+    cfg_regex = Label(cfg_frame, text='Regex:')
+    cfg_regex.grid(column=0, row=1, sticky='nsew')
+
+    # Entry (Regex)
+    entry_regex = Text(cfg_frame, height=1, width=52)
+    entry_regex.configure()
+    entry_regex.insert('1.0', create_regex(list(t_overview.item(child)['values'][0] for child in t_overview.selection())))
+    entry_regex.grid(column=1, row=1, sticky='new')
+
+    # Note frame
+    cfg_note_frame = ttk.Frame(cfg_frame, borderwidth=2, relief='groove', padding="3 3 7 0")
+    cfg_note_frame.grid(column=0, columnspan=2, row=3, sticky='nsew')
+    cfg_note = Label(cfg_note_frame, text='Please provide a species name!\ne.g. Arabidopsis thaliana', justify='left')
+    cfg_note.grid(column=0, row=0, sticky='nsew')
+
+    # Button for Saving
+    add_button = Button(cfg_frame, text='Add', width=10, command=lambda: add2cfg(entry_species.get('1.0', 'end'),
+                                                                                 entry_regex.get('1.0', 'end')))
+    add_button.grid(column=1, row=2, pady=7, sticky='NES')
+
+    # Set minimum size
+    cfg_window.update_idletasks()
+    cfg_window.minsize(cfg_window.winfo_width(), cfg_window.winfo_height())
+
+
+def add2cfg(species, regex):
+    species = species.replace('\n', '')
+    regex = regex.replace('\n', '')
+
+    with open(config_file) as config:
+        cfg = config.read()
+
+    dict_ = {}
+    entries = cfg.split('\n')
+    for entry in entries:
+        spec, rgx = entry.split(',')[0], entry.split(',')[1:-1]
+        dict_[spec] = rgx
+
+    try:
+        dict_[species]
+        dict_[species] += [regex]
+    except KeyError:
+        dict_[species] = [regex]
+
+    print(dict_)
+
 
 # ----- CONSTANT -------------------------------------------------------------------------------------------------------
 # Initiate
@@ -732,6 +884,11 @@ menu_edit.add_command(label='Delete', command=donothing)
 menu_edit.add_separator()
 menu_edit.add_command(label='Undo', command=donothing)
 menu_edit.add_command(label='Redo', command=donothing)
+# Actions (Menu)
+menu_actions = Menu(menubar, tearoff=0)
+menubar.add_cascade(menu=menu_actions, label='Actions')
+menu_actions.add_command(label='Extract IDs', command=extract_ids)
+menu_actions.add_command(label='Rename', command=lambda: translate_entry('./config.txt'))
 
 # "Current file:"
 open_file_frame = ttk.Frame(mainframe, height=1)
@@ -775,6 +932,13 @@ t_overview.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
 t_overview.bind('<Delete>', lambda e: delete_seq(t_overview, e))
 
+context = Menu(root, tearoff=0)
+context.add_command(label='Extract Regex', command=open_cfg_window)
+# Add a Right click event to open-up the context menu
+t_overview.bind('<Button-3>', lambda e: context.post(e.x_root, e.y_root))
+# Add a Left click event to close the context menu
+t_overview.bind('<Button-1>', lambda e: context.unpost())
+
 # We start at the overview, so no need to grid_remove
 
 # ----- Duplicates Frame -----------------------------------------------------------------------------------------------
@@ -812,31 +976,36 @@ t_dup.bind('<Delete>', lambda e: delete_seq(t_dup, e))
 
 # SEQUENCES
 dup_seqs = ttk.Frame(dup_notebook)
-dup_seqs.grid_rowconfigure(1, weight=1)
-dup_seqs.grid_columnconfigure(0, weight=1)
+dup_seqs.grid_rowconfigure(2, weight=1)
+dup_seqs.grid_columnconfigure(2, weight=1)
 dup_notebook.add(dup_seqs, text='Sequences')
 # Combobox for what comparison to make
-comp_file_select = ttk.Combobox(dup_seqs, values=('U (Uniques)', 'D (Duplicates)', 'U + D'), state='readonly')
-comp_file_select.grid(column=0, row=0, sticky='nsew')
+dup_select = ttk.Combobox(dup_seqs, values=('U (Uniques)', 'D (Duplicates)', 'U + D'), state='readonly')
+dup_select.grid(column=0, row=0, sticky='nsew')
 # Combobox for what action to take for a given comparison
-comp_file_action = ttk.Combobox(dup_seqs, values=('Move', 'Copy', 'Treeview'), state='readonly')
-comp_file_action.grid(column=1, row=0, sticky='nsew')
+dup_action = ttk.Combobox(dup_seqs, values=('Move', 'Copy', 'Treeview'), state='readonly')
+dup_action.grid(column=1, row=0, sticky='nsew')
 # Entry field to a possible Move or Copy action
-comp_file_entry = ttk.Entry(dup_seqs)
-comp_file_entry.grid(column=2, row=0, sticky='nsew')
+dup_entry = ttk.Entry(dup_seqs)
+dup_entry.grid(column=2, row=0, sticky='nsew')
 # The Go Button for running the above selected options
-comp_file_go = ttk.Button(dup_seqs, text='Go', command=dup_seq_go)
-comp_file_go.grid(column=3, row=0, sticky='nsew')
+dup_go = ttk.Button(dup_seqs, text='Go', command=lambda: dup_seq_go(scale_var.get()))
+dup_go.grid(column=3, row=0, sticky='nsew')
+# A slider for adjusting the value of threshold
+scale_var = IntVar()
+dup_scale = tkinter.Scale(dup_seqs, orient=HORIZONTAL, from_=50.0, to=100.0, variable=scale_var)
+dup_scale.grid(column=0, columnspan=4, row=1, sticky='we')
+dup_scale.set(100)
 # Treeview
 t_dup_seq = ttk.Treeview(dup_seqs, columns='s')
 t_dup_seq.heading('#0', text='#', command=lambda: sort_tree(t_dup_seq, '#0', 'int'))
 t_dup_seq.column('#0', width=50, stretch=False)
 t_dup_seq.heading('s', text='Sequences', command=lambda: sort_tree(t_dup_seq, 's', 'str'))
-t_dup_seq.grid(column=0, columnspan=4, row=1, sticky='nsew')
+t_dup_seq.grid(column=0, columnspan=4, row=2, sticky='nsew')
 # Add a slider to the right
 t_dup_slider_s = ttk.Scrollbar(dup_seqs, orient=VERTICAL, command=t_dup_seq.yview)
 t_dup_seq.configure(yscrollcommand=t_dup_slider_s.set)
-t_dup_slider_s.grid(column=3, row=1, sticky='NSE')
+t_dup_slider_s.grid(column=3, row=2, sticky='NSE')
 
 dup_frame.grid_remove()
 
@@ -873,6 +1042,8 @@ t_sc_header.configure(yscrollcommand=t_sc_header_slider.set)
 t_sc_header_slider.grid(column=3, row=1, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
 t_sc_header.bind('<Double-1>', open_window)
+# Add a Delete event for removal of sequences
+t_sc_header.bind('<Delete>', lambda e: delete_seq(t_sc_header, e))
 
 # Go Button
 go_buttonH = ttk.Button(n_headers, text='Go', command=lambda: go_button(True))
@@ -897,6 +1068,8 @@ t_sc_seq.configure(yscrollcommand=t_sc_seq_slider.set)
 t_sc_seq_slider.grid(column=3, row=1, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
 t_sc_seq.bind('<Double-1>', open_window)
+# Add a Delete event for removal of sequences
+t_sc_seq.bind('<Delete>', lambda e: delete_seq(t_sc_seq, e))
 
 # Go Button
 go_buttonS = ttk.Button(n_seqs, text='Go', command=lambda: go_button(False))
@@ -918,7 +1091,7 @@ sim_message = ttk.Label(sim_frame,
 sim_message.grid(column=0, row=0, sticky='nw')
 sim_frame.bind('<Configure>', update_sim_message)
 #
-run_button = ttk.Button(sim_frame, text='Run', command=lambda: fill_similarity_tree(0.5))
+run_button = ttk.Button(sim_frame, text='Run', command=lambda: fill_similarity_tree(0.95))
 run_button.grid(column=1, row=0, sticky='ns')
 #
 t_sim = ttk.Treeview(sim_frame, columns='h')
@@ -949,6 +1122,17 @@ o2h_frame.grid_remove()
 # ----- Renamer Frame --------------------------------------------------------------------------------------------------
 rnmr_frame = Frame(mainframe, borderwidth=2, relief='groove')
 rnmr_frame.grid(column=1, columnspan=2, row=1, sticky='nsew', padx=7)
+rnmr_frame.grid_rowconfigure(1, weight=1)
+rnmr_frame.grid_columnconfigure(0, weight=1)
+rnmr_frame.grid_propagate(False)
+#
+rnmr_label = StringVar(value='Configuration file:')
+rnmr_message = ttk.Label(rnmr_frame, textvariable=rnmr_label, width=100)
+rnmr_message.grid(column=0, row=0, sticky='nw')
+rnmr_frame.bind('<Configure>', update_sim_message)
+#
+load_rnmr_button = ttk.Button(rnmr_frame, text='Load', command=load_configure)
+load_rnmr_button.grid(column=2, row=0, sticky='nws')
 
 rnmr_frame.grid_remove()
 

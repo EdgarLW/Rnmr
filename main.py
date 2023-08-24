@@ -42,6 +42,8 @@ def parse_fasta(filename):
     fasta = {}
     for line in lines:
         line = line.replace('\n', '').strip()
+        if not line:
+            continue
         if line[0] == '>':
             header = line[1:]
             seq = ''

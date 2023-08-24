@@ -1,6 +1,0 @@
-Actinidia chinensis,CEY00\.Acc\d+,
-Ananas comosus,Aco\d+,
-Anacardium occidentale,Anaoc\.\d+s\d+,
-Aquilegia coeruela,Aqcoe\dG\d+,
-Arabidopsis thaliana,AT\dG\d+,
-Azadirachta indica,Neem\.\d+
