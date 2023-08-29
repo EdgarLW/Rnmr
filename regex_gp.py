@@ -84,4 +84,4 @@ def create_regex(subjects):
 
             out += typ
         regex += out
-    return regex
+    return regex.replace('_', '[_.]').replace('\.', '[_.]')

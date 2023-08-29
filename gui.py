@@ -19,6 +19,7 @@ WINDOW_WIDTH = 900
 # Base
 file = ''
 config_file = './config.txt'
+cfg = {}
 
 
 class FastaFile:
@@ -108,6 +109,20 @@ class FastaFile:
 
         fasta.headers = fasta.content.keys()
         fasta.values = fasta.content.values()
+
+    def save(self, _as=False):
+
+        if not _as:
+            global file
+        else:
+            file = filedialog.asksaveasfile()
+
+        out = ''
+        for k, v in self.items:
+            v = v[1]  # Get only the sequence
+            out += f'>{k}\n{v}\n'
+
+        file.write(out[:-1])
 
 
 # Initiate GLOBAL fasta
@@ -297,6 +312,8 @@ comp_lst = CompLst([{}, {}, {}])
 # ----------------------------
 
 
+# ----- BASIC FUNCTIONS -----
+
 def donothing():
     print('Nothing')
 
@@ -396,7 +413,24 @@ def navigate(idxs):
             comp_frame.grid()
 
 
-def delete_seq(tree, event):
+def delete_seq(event):
+    if t_overview.winfo_ismapped():
+        tree = t_overview
+    elif t_dup.winfo_ismapped():
+        tree = t_dup
+    elif t_dup_seq.winfo_ismapped():
+        tree = t_dup_seq
+    elif t_sc_header.winfo_ismapped():
+        tree = t_sc_header
+    elif t_sc_seq.winfo_ismapped():
+        tree = t_sc_seq
+    elif t_sim.winfo_ismapped():
+        tree = t_sim
+    elif t_comp.winfo_ismapped():
+        tree = t_comp
+    else:
+        return
+
     # Check for content inside Treeview before opening new window
     if not event.widget.selection():
         return
@@ -407,25 +441,23 @@ def delete_seq(tree, event):
     # Get a list of the widgets children and then the index number of the selected item
     tree_children = tree.get_children('')
 
-    # Get the item that was clicked
-    item_id = event.widget.focus()
+    for child in tree.selection():
 
-    item_idx = tree_children.index(event.widget.focus())
+        item_idx = tree_children.index(child)
 
-    # Get the values of the item
-    item = event.widget.item(item_id)
-    header = item['values'][0]
-    fasta.content.pop(header)
-    for lst in sim_lst:
-        try:
-            lst.remove(header)
-        except KeyError:
-            pass
+        # Get the values of the item
+        item = event.widget.item(child)
+        header = item['values'][0]
+        fasta.content.pop(header)
+        for lst in sim_lst:
+            try:
+                lst.remove(header)
+            except KeyError:
+                pass
 
     # Update the trees and labels
     update_labels()
     fasta.update_trees()
-    #fill_similarity_tree(0.5)
 
     # Set the focus to be the same idx number
     tree_children = tree.get_children()
@@ -438,6 +470,30 @@ def delete_seq(tree, event):
         except IndexError:
             tree.focus(tree_children[item_idx - 1])
             tree.selection_set(tree_children[item_idx - 1])
+
+
+def select_all():
+    if t_overview.winfo_ismapped():
+        for child in t_overview.get_children():
+            t_overview.selection_add(child)
+    elif t_dup.winfo_ismapped():
+        for child in t_dup.get_children():
+            t_dup.selection_add(child)
+    elif t_dup_seq.winfo_ismapped():
+        for child in t_dup_seq.get_children():
+            t_dup_seq.selection_add(child)
+    elif t_sc_header.winfo_ismapped():
+        for child in t_sc_header.get_children():
+            t_sc_header.selection_add(child)
+    elif t_sc_seq.winfo_ismapped():
+        for child in t_sc_seq.get_children():
+            t_sc_seq.selection_add(child)
+    elif t_sim.winfo_ismapped():
+        for child in t_sim.get_children():
+            t_sim.selection_add(child)
+    elif t_comp.winfo_ismapped():
+        for child in t_comp.get_children():
+            t_comp.selection_add(child)
 
 
 def update_sim_message(event):
@@ -717,7 +773,7 @@ def extract_ids():
 
     id_regex = re.compile('ID=[a-zA-Z0-9_.]*')
     locus_regex = re.compile('locus=[a-zA-Z0-9_.]*')
-    gene_regex = re.compile('gene:[a-zA-Z0-9_.]*')
+    # t_regex = re.compile('transcript:[a-zA-Z0-9_.]*')
 
     for header in list(fasta.headers):
         if re.search(id_regex, header):
@@ -726,9 +782,9 @@ def extract_ids():
         elif re.search(locus_regex, header):
             match = re.search(locus_regex, header)
             func_save_button((True, header, match.group(0)[6:]))
-        elif re.search(gene_regex, header):
-            match = re.search(gene_regex, header)
-            func_save_button((True, header, match.group(0)[5:]))
+        # elif re.search(t_regex, header):
+        #     match = re.search(t_regex, header)
+        #     func_save_button((True, header, match.group(0)[11:]))
         else:
             func_save_button((True, header, header.split(' ')[0]))
 
@@ -737,12 +793,15 @@ def extract_ids():
 
 
 # translate_entry( str ->  )
-def translate_entry():
+def translate_entry(config):
 
-    global config_file
-
-    with open(config_file) as file:
-        lines = file.readlines()
+    if config:
+        with open(config) as file:
+            lines = file.readlines()
+    else:
+        global config_file
+        with open(config_file) as file:
+            lines = file.readlines()
 
     global renames
 
@@ -756,12 +815,12 @@ def translate_entry():
 
     for item in renames:
         genus, species = item[0].split(' ')
-        re_gex = item[1]
+        re_gex = item[1].strip()
         pattern = re.compile(re_gex)
 
         for header in list(fasta.headers):
             # When a match is found
-            if re.search(pattern, header) and header[:6] != f'{genus[:2]}{species[:3]}_':
+            if re.match(pattern, header) and header[:6] != f'{genus[:2]}{species[:3]}_':
                 func_save_button((True, header, f'{genus[:2]}{species[:3]}_{header}'))
 
     fasta.update_trees()
@@ -777,12 +836,32 @@ def load_configure():
 
 
 def open_cfg_window():
+
+    if not t_overview.selection():
+        return
+
+    # Load config_file
+    global config_file
+    global cfg
+    with open(config_file) as config:
+        config = config.read()
+
+    dict_ = {}
+    entries = config.split('\n')
+    for entry in entries:
+        if not entry:
+            break
+        spec, rgx = entry.split(',')[0], entry.split(',')[1:]
+        dict_[spec] = [r.strip() for r in rgx]
+    cfg = dict_
+    del dict_, config
+
     # Create and display the new window
     cfg_window = Toplevel(root)
     cfg_window.title('Add to Config')
-    # cfg_window.columnconfigure(2, weight=1)
+    cfg_window.columnconfigure(0, weight=1)
     cfg_window.rowconfigure(3, weight=1)
-    cfg_frame = ttk.Frame(cfg_window, padding="3 3 7 0")
+    cfg_frame = ttk.Frame(cfg_window, padding="3 3 3 3")
     cfg_frame.grid(column=0, row=0, sticky='NSEW')
     cfg_window.option_add('**tearOff', FALSE)
     cfg_window.minsize(500, 180)
@@ -808,41 +887,46 @@ def open_cfg_window():
     entry_regex.grid(column=1, row=1, sticky='new')
 
     # Note frame
-    cfg_note_frame = ttk.Frame(cfg_frame, borderwidth=2, relief='groove', padding="3 3 7 0")
+    cfg_note_frame = ttk.Frame(cfg_frame, borderwidth=2, relief='groove', padding="3 3 3 3")
     cfg_note_frame.grid(column=0, columnspan=2, row=3, sticky='nsew')
     cfg_note = Label(cfg_note_frame, text='Please provide a species name!\ne.g. Arabidopsis thaliana', justify='left')
     cfg_note.grid(column=0, row=0, sticky='nsew')
 
     # Button for Saving
     add_button = Button(cfg_frame, text='Add', width=10, command=lambda: add2cfg(entry_species.get('1.0', 'end'),
-                                                                                 entry_regex.get('1.0', 'end')))
+                                                                                 entry_regex.get('1.0', 'end'),
+                                                                                 cfg_window))
     add_button.grid(column=1, row=2, pady=7, sticky='NES')
 
-    # Set minimum size
-    cfg_window.update_idletasks()
-    cfg_window.minsize(cfg_window.winfo_width(), cfg_window.winfo_height())
 
+def add2cfg(species, regex, window):
 
-def add2cfg(species, regex):
-    species = species.replace('\n', '')
-    regex = regex.replace('\n', '')
+    species, regex = species.replace('\n', ''), regex.replace('\n', '')
 
-    with open(config_file) as config:
-        cfg = config.read()
+    if not species:
+        raise_error('Please provide a species name')
+        return
+    elif not regex:
+        raise_error('Please provide a sequence regex')
+        return
 
-    dict_ = {}
-    entries = cfg.split('\n')
-    for entry in entries:
-        spec, rgx = entry.split(',')[0], entry.split(',')[1:-1]
-        dict_[spec] = rgx
-
+    global cfg
     try:
-        dict_[species]
-        dict_[species] += [regex]
+        if regex not in cfg[species]:
+            cfg[species] += [regex]
     except KeyError:
-        dict_[species] = [regex]
+        cfg[species] = [regex]
 
-    print(dict_)
+    out = ''
+    for s, r in cfg.items():
+        out += f'{s}, '
+        for r_item in r:
+            out += f'{r_item}, '
+        out = f'{out[:-2]}\n'
+    with open(config_file, 'w') as file:
+        file.write(out)
+
+    window.destroy()
 
 
 # ----- CONSTANT -------------------------------------------------------------------------------------------------------
@@ -865,22 +949,15 @@ root['menu'] = menubar
 # File (Menu)
 menu_file = Menu(menubar, tearoff=0)
 menubar.add_cascade(menu=menu_file, label='File')
-menu_file.add_command(label='New', command=donothing)
 menu_file.add_command(label='Open...', command=open_file)
-menu_file.add_command(label='Save', command=donothing)
-menu_file.add_command(label='Save as...', command=donothing)
+menu_file.add_command(label='Save', command=fasta.save)
+menu_file.add_command(label='Save as...', command=lambda: fasta.save(_as=True))
 menu_file.add_separator()
 menu_file.add_command(label='Close', command=root.quit)
 # Edit (Menu)
 menu_edit = Menu(menubar, tearoff=0)
 menubar.add_cascade(menu=menu_edit, label='Edit')
-menu_edit.add_command(label='Select', command=donothing)
-menu_edit.add_command(label='Select all', command=donothing)
-menu_edit.add_separator()
-menu_edit.add_command(label='Copy', command=donothing)
-menu_edit.add_command(label='Cut', command=donothing)
-menu_edit.add_command(label='Paste', command=donothing)
-menu_edit.add_command(label='Delete', command=donothing)
+menu_edit.add_command(label='Select all', command=select_all)
 menu_edit.add_separator()
 menu_edit.add_command(label='Undo', command=donothing)
 menu_edit.add_command(label='Redo', command=donothing)
@@ -930,7 +1007,7 @@ t_slider.grid(column=1, row=0, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
 t_overview.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
-t_overview.bind('<Delete>', lambda e: delete_seq(t_overview, e))
+t_overview.bind('<Delete>', lambda e: delete_seq(e))
 
 context = Menu(root, tearoff=0)
 context.add_command(label='Extract Regex', command=open_cfg_window)
@@ -972,7 +1049,7 @@ t_dup_slider_h.grid(column=1, row=1, sticky='nse')
 # Add double click option on entry to open new window with FASTA
 t_dup.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
-t_dup.bind('<Delete>', lambda e: delete_seq(t_dup, e))
+t_dup.bind('<Delete>', lambda e: delete_seq(e))
 
 # SEQUENCES
 dup_seqs = ttk.Frame(dup_notebook)
@@ -1043,7 +1120,7 @@ t_sc_header_slider.grid(column=3, row=1, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
 t_sc_header.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
-t_sc_header.bind('<Delete>', lambda e: delete_seq(t_sc_header, e))
+t_sc_header.bind('<Delete>', lambda e: delete_seq(e))
 
 # Go Button
 go_buttonH = ttk.Button(n_headers, text='Go', command=lambda: go_button(True))
@@ -1069,7 +1146,7 @@ t_sc_seq_slider.grid(column=3, row=1, sticky='NSE')
 # Add double click option on entry to open new window with FASTA
 t_sc_seq.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
-t_sc_seq.bind('<Delete>', lambda e: delete_seq(t_sc_seq, e))
+t_sc_seq.bind('<Delete>', lambda e: delete_seq(e))
 
 # Go Button
 go_buttonS = ttk.Button(n_seqs, text='Go', command=lambda: go_button(False))
@@ -1109,7 +1186,7 @@ t_sim.grid(column=0, columnspan=2, row=1, sticky='nsew')
 # Add double click option on entry to open new window with FASTA
 t_sim.bind('<Double-1>', open_window)
 # Add a Delete event for removal of sequences
-t_sim.bind('<Delete>', lambda e: delete_seq(t_sim, e))
+t_sim.bind('<Delete>', lambda e: delete_seq(e))
 
 sim_frame.grid_remove()
 
