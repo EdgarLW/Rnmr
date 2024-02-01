@@ -1,4 +1,5 @@
 import tkinter.ttk
+import os
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
@@ -10,6 +11,10 @@ from main import group_similar_strings
 from difflib import SequenceMatcher
 from regex_gp import *
 import re
+
+display = os.environ["DISPLAY"]
+if display != ":0.0":
+    os.environ["DISPLAY"] = ":0.0"
 
 # Set the minimum size for the window
 WINDOW_HEIGHT = 500
