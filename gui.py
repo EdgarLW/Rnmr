@@ -128,7 +128,7 @@ class FastaFile:
             v = v[1]  # Get only the sequence
             out += f'>{k}\n{v}\n'
 
-        with open(file) as filename:
+        with open(file, 'w') as filename:
             filename.write(out[:-1])
 
 
@@ -957,7 +957,7 @@ root['menu'] = menubar
 menu_file = Menu(menubar, tearoff=0)
 menubar.add_cascade(menu=menu_file, label='File')
 menu_file.add_command(label='Open...', command=open_file)
-menu_file.add_command(label='Save', command=fasta.save)
+menu_file.add_command(label='Save', command=lambda: fasta.save())
 menu_file.add_command(label='Save as...', command=lambda: fasta.save(_as=True))
 menu_file.add_separator()
 menu_file.add_command(label='Close', command=root.quit)
