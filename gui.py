@@ -12,9 +12,10 @@ from difflib import SequenceMatcher
 from regex_gp import *
 import re
 
-display = os.environ["DISPLAY"]
-if display != ":0.0":
-    os.environ["DISPLAY"] = ":0.0"
+if os.name != 'nt':
+    display = os.environ["DISPLAY"]
+    if display != ":0.0":
+        os.environ["DISPLAY"] = ":0.0"
 
 # Set the minimum size for the window
 WINDOW_HEIGHT = 500
@@ -127,7 +128,8 @@ class FastaFile:
             v = v[1]  # Get only the sequence
             out += f'>{k}\n{v}\n'
 
-        file.write(out[:-1])
+        with open(file) as filename:
+            filename.write(out[:-1])
 
 
 # Initiate GLOBAL fasta
